@@ -301,6 +301,7 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
         "debrief": pending_debrief(),
         "max_mi": max_mi,
         "has_home": home_coords(settings) is not None,
+        "included_tags": included_tags(settings),
     })
 
 
@@ -375,6 +376,31 @@ async def set_tags(request: Request):
         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('included_tags', ?)",
                      (",".join(selected),))
     return RedirectResponse(back, status_code=303)
+
+
+@app.post("/settings/tags/toggle")
+def toggle_tag_filter(tag: str):
+    """One-tap tag filtering: clicking a tag chip anywhere flips it in/out of
+    the included_tags setting."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'included_tags'").fetchone()
+        current = [t for t in (row["value"] if row else "").split(",") if t]
+        if tag in current:
+            current.remove(tag)
+            state = "off"
+        else:
+            current.append(tag)
+            state = "on"
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('included_tags', ?)",
+                     (",".join(current),))
+    return {"ok": True, "state": state}
+
+
+@app.post("/settings/tags/clear")
+def clear_tag_filter():
+    with get_conn() as conn:
+        conn.execute("DELETE FROM settings WHERE key = 'included_tags'")
+    return {"ok": True}
 
 
 @app.post("/settings/home")

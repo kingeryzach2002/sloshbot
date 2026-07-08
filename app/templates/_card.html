@@ -15,7 +15,8 @@
       {{ e.host_rep.ok }}/{{ e.host_rep.ok + e.host_rep.miss }} as promised</span>{% endif %}
   </div>
   {% if e.tags %}
-    <div class="tags">{% for t in e.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
+    <div class="tags">{% for t in e.tags %}<span class="tag {{ 'on' if t in included_tags | default([]) }}"
+      onclick="toggleTag('{{ t }}')" title="filter to this tag">{{ t }}</span>{% endfor %}</div>
   {% endif %}
   {% if e.rationales.booze %}
     <div class="whyline"><b>🍸 {{ (e.scores.booze * 100) | round | int }}%</b> — {{ e.rationales.booze }}</div>

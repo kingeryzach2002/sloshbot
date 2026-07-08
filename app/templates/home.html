@@ -52,7 +52,18 @@
   .rep.bad { color: var(--red); }
   .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .tag { font-size: 11px; padding: 1px 8px; border-radius: 99px;
-         border: 1px solid var(--line); background: var(--card2); color: var(--muted); }
+         border: 1px solid var(--line); background: var(--card2); color: var(--muted);
+         cursor: pointer; }
+  .tag:hover { border-color: var(--gold-dim); color: var(--text); }
+  .tag.on { border-color: var(--gold); color: var(--gold); }
+  .filterbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+               margin: -8px 0 18px; font-size: 13px; }
+  .filterbar .fl { color: var(--muted); }
+  .fchip { color: var(--text); text-decoration: none; border: 1px solid var(--gold-dim);
+           background: var(--card2); border-radius: 99px; padding: 2px 10px; }
+  .fchip b { color: var(--muted); font-weight: 600; margin-left: 3px; }
+  .fchip:hover b { color: var(--red); }
+  .fclear { color: var(--muted); font-size: 12px; text-decoration: underline; cursor: pointer; }
   .btn { font-size: 13px; padding: 7px 14px; border-radius: 9px; cursor: pointer;
          border: 1px solid var(--line); background: var(--card2); color: var(--text);
          text-decoration: none; }
@@ -118,6 +129,8 @@
       <a href="/?lens={{ l }}" class="{{ 'active' if l == lens else '' }}">{{ l }}</a>
     {% endfor %}
   </div>
+  {% set back = '/' %}
+  {% include "_filterbar.html" %}
 
   {% if debrief %}
   <div class="debrief" id="debrief">
@@ -153,7 +166,8 @@
         — {{ hero.rationales.get(lens) }}</div>
     {% endif %}
     {% if hero.tags %}
-      <div class="tags">{% for t in hero.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
+      <div class="tags">{% for t in hero.tags %}<span class="tag {{ 'on' if t in included_tags | default([]) }}"
+        onclick="toggleTag('{{ t }}')" title="filter to this tag">{{ t }}</span>{% endfor %}</div>
     {% endif %}
     <div class="actions">
       <button class="btn primary" onclick="hold(this, '{{ hero.id }}', '{{ hero.gcal }}', '{{ lens }}')">+ hold on calendar</button>
@@ -203,6 +217,14 @@
       const other = btn.parentElement.querySelector(`[data-verdict="${FB_PAIRS[verdict]}"]`);
       if (other) other.classList.remove("done");
     }
+  }
+  async function toggleTag(tag) {
+    await fetch(`/settings/tags/toggle?tag=${encodeURIComponent(tag)}`, { method: "POST" });
+    location.reload();
+  }
+  async function clearFilters(back) {
+    await fetch("/settings/tags/clear", { method: "POST" });
+    location.href = back;  // back has no query string, so max_mi drops too
   }
   async function hold(btn, eventId, gcal, lens) {
     fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
