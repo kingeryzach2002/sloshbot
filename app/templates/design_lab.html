@@ -53,11 +53,13 @@
   /* === brass & oxblood — warm gold + a deep claret pulled from leather/wine === */
   .lab[data-pal="brass"] {
     --bg: #0f0908; --card: #170f0c; --card2: #201512;
-    --text: #ece0d3; --muted: #9f8879; --faint: #6b544a;
-    --line: #281c17; --line2: #38281f;
-    --gold: #cf9b3e; --gold-dim: #7a5a2a; --gold-glow: rgba(207, 155, 62, 0.11);
-    --gold-press: #936a24; --sheen-c: rgba(207, 155, 62, 0.13);
-    --meta: #a98d7f; --green: #7e8a4e; --red: #9c4a44;
+    /* text ladder pinned to measured contrast: text 15:1, meta 9:1,
+       muted 7:1, faint 5:1 — all clear AA, all still warm + low-chroma */
+    --text: #efe4d6; --muted: #b49c86; --faint: #96806d;
+    --line: #2c2019; --line2: #3d2b22;              /* borders lifted so structure reads */
+    --gold: #d0a04a; --gold-dim: #8a6733; --gold-glow: rgba(208, 160, 74, 0.12);
+    --gold-press: #9a7126; --sheen-c: rgba(208, 160, 74, 0.14);
+    --meta: #c8af99; --green: #93a05a; --red: #c26a5f;
   }
   /* === gilt & patina — aged gold + a verdigris/absinthe green (bottle glass) === */
   .lab[data-pal="patina"] {
