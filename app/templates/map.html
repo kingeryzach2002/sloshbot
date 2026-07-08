@@ -9,7 +9,8 @@
 {% include "_theme.html" %}
 <style>
   body { display: flex; flex-direction: column; height: 100vh; }
-  .topwrap { padding: 16px 20px 0; }
+  /* sit above Leaflet's map panes/controls so open filter dropdowns aren't clipped by the map */
+  .topwrap { padding: 16px 20px 0; position: relative; z-index: 1100; }
   header { margin-bottom: 14px; }
   .barrow { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
   .barrow .filterbar { flex: 1; margin-bottom: 0; }
