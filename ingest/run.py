@@ -24,7 +24,11 @@ SOURCES = {}
 for _finder, _name, _ in pkgutil.iter_modules(ingest.sources.__path__):
     if _name.startswith("_"):
         continue
-    _mod = importlib.import_module(f"ingest.sources.{_name}")
+    try:  # a broken/half-written module must not block the other sources
+        _mod = importlib.import_module(f"ingest.sources.{_name}")
+    except Exception as _exc:
+        print(f"[skip] ingest.sources.{_name} failed to import: {_exc}", file=sys.stderr)
+        continue
     if hasattr(_mod, "fetch"):
         SOURCES[_name] = _mod.fetch
 
