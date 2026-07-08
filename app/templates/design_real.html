@@ -333,169 +333,394 @@
 </style>
 
 <style>
+  /* ============================================================
+     real-page additions: filter bar, sticky day headers,
+     spacing re-rhythm (4px scale), one-line rationale clamp.
+     ============================================================ */
   #real { max-width: 720px; margin: 0 auto; }
-  .day { margin-top: 30px; }
-  .day:first-of-type { margin-top: 8px; }
-  .dayhead { display: flex; align-items: baseline; gap: 11px; margin: 0 0 14px;
-              padding-bottom: 8px; border-bottom: 1px solid var(--line2); }
-  .dayhead .dow { font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 21px; }
-  .dayhead .date { font-size: 11px; letter-spacing: 0.14em; color: var(--faint); }
-  .dayhead .cnt { margin-left: auto; font-size: 11.5px; color: var(--faint);
-                   font-variant-numeric: tabular-nums; }
-  .stack { display: grid; gap: 14px; }
-  .more { margin-top: 12px; }
-  .more > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center;
-                     gap: 8px; font-size: 12.5px; color: var(--faint); padding: 6px 0;
-                     transition: color .15s; }
-  .more > summary::-webkit-details-marker { display: none; }
-  .more > summary::before { content: "\25B8"; color: var(--gold-dim);
-                             transition: transform .2s var(--ease); }
-  .more[open] > summary::before { transform: rotate(90deg); }
-  .more > summary:hover { color: var(--gold); }
+  .day { margin-top: 28px; }
+  .day:first-of-type { margin-top: 0; }
+
+  /* ---- sticky filter bar ---- */
+  .fb { position: sticky; top: 0; z-index: 30; background: rgba(15,9,8,0.86);
+        -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--line2); }
+  .fb .wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+              row-gap: 10px; padding-top: 12px; padding-bottom: 12px; }
+  .fb-mark { font-family: var(--serif); font-style: italic; font-weight: 600;
+             font-size: 17px; color: var(--text); margin: 0; flex: none; }
+  .fb-mark .tip { color: var(--gold); }
+
+  .fb-ctl { display: flex; align-items: center; gap: 8px; flex: none; }
+  .fb-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+            color: var(--faint); white-space: nowrap; }
+
+  /* threshold — the signature control */
+  .thresh { display: flex; align-items: center; gap: 10px; flex: 1 1 220px; min-width: 180px; max-width: 300px; }
+  .thresh-track { position: relative; flex: 1; height: 24px; display: flex; align-items: center; }
+  .thresh-line { position: absolute; left: 0; right: 0; top: 50%; height: 1px;
+                 background: var(--line2); transform: translateY(-50%); }
+  .thresh-fill { position: absolute; left: 0; top: 50%; height: 1px; background: var(--gold);
+                 transform: translateY(-50%); pointer-events: none; }
+  .thresh-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+                  -webkit-appearance: none; appearance: none; background: transparent;
+                  cursor: pointer; }
+  .thresh-range::-webkit-slider-runnable-track { background: transparent; height: 24px; }
+  .thresh-range::-moz-range-track { background: transparent; height: 24px; }
+  .thresh-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+                  width: 22px; height: 22px; background: transparent; border: none; }
+  .thresh-range::-moz-range-thumb { width: 22px; height: 22px; background: transparent;
+                  border: none; }
+  .thresh-thumb { position: absolute; top: 50%; width: 22px; height: 22px;
+                  transform: translate(-50%, -50%); pointer-events: none; }
+  .thresh-thumb .coupe { width: 22px; height: 22px; }
+  .thresh-range:focus-visible ~ .thresh-thumb { outline: 2px solid var(--gold);
+                  outline-offset: 3px; border-radius: 50%; }
+  .thresh-read { font-variant-numeric: tabular-nums; color: var(--gold); font-size: 13px;
+                 font-weight: 600; width: 34px; text-align: right; flex: none; }
+
+  /* distance stepper — reuses the .switch .seg segmented-control material */
+  .fb-seg { display: inline-flex; gap: 3px; background: var(--card2);
+            border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
+  .fb-seg button { font: inherit; font-family: var(--mono); font-size: 11.5px;
+            font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer;
+            background: none; border: none; border-radius: 5px; padding: 4px 9px;
+            transition: color .18s, background .3s var(--ease); }
+  .fb-seg button:hover { color: var(--text); }
+  .fb-seg button[aria-current="true"] { background: var(--gold); color: var(--bg); }
+  .fb-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* free-only stamp toggle */
+  .fb-stamp { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1.5px solid var(--line2); border-radius: 5px; padding: 5px 10px;
+              cursor: pointer; flex: none;
+              transition: transform .12s var(--ease), color .15s, border-color .15s; }
+  .fb-stamp:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-stamp:active { transform: scale(0.94) rotate(-2deg); }
+  .fb-stamp:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-stamp[aria-pressed="true"] { color: var(--gold); border-color: var(--gold);
+              transform: rotate(-3deg); }
+
+  /* tags popover */
+  .fb-tags { position: relative; flex: none; }
+  .fb-tags-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1.5px solid var(--line2); border-radius: 5px; padding: 5px 10px;
+              cursor: pointer; transition: color .15s, border-color .15s; }
+  .fb-tags-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-tags-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-tags-btn.active { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+              min-width: 200px; max-width: 260px; background: var(--card2);
+              border: 1px solid var(--line2); border-radius: 10px; padding: 10px;
+              box-shadow: 0 16px 30px -12px rgba(0,0,0,0.9);
+              display: none; flex-wrap: wrap; gap: 6px; }
+  .fb-panel.open { display: flex; }
+  .fb-chip { font-size: 11px; color: var(--muted); background: var(--card);
+             border: 1px solid var(--line2); border-radius: 99px; padding: 4px 10px;
+             cursor: pointer; transition: color .15s, border-color .15s; }
+  .fb-chip:hover { color: var(--text); }
+  .fb-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-chip .n { color: var(--faint); margin-left: 4px; }
+  .fb-chip.on { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-chip.on .n { color: var(--gold-dim); }
+
+  /* ---- sticky day headers, riding just under the filter bar ---- */
+  .dayhead { display: flex; align-items: baseline; gap: 11px; margin: 0 0 12px;
+             padding: 10px 0 8px; border-bottom: 1px solid var(--line2);
+             position: sticky; top: 57px; z-index: 20; background: rgba(15,9,8,0.92);
+             -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+
   .more[open] > summary { margin-bottom: 8px; }
   .more .stack { padding-top: 2px; }
+  .more summary { color: var(--faint); font-size: 12px; cursor: pointer;
+                  list-style: none; }
+  .more summary::-webkit-details-marker { display: none; }
+  .more summary:hover { color: var(--muted); }
+
+  /* ---- spacing re-rhythm onto a 4px scale (tidy-up, not a redesign) ---- */
+  .ta-card { padding: 16px 16px 16px; }
+  .ta-meta { margin-top: 8px; }
+  .ta-why { margin: 12px 0 4px; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; max-width: 100%; }
+  .ta-foot { margin-top: 16px; }
+  .ta-stamp-row { margin-top: 12px; padding-top: 12px; }
+
+  /* fade-in for cards newly revealed by a filter change */
+  @keyframes fb-enter { from { opacity: 0; } to { opacity: 1; } }
+  .ta-card.enter { animation: fb-enter .15s var(--ease); }
+
+  /* empty state */
+  .fb-empty { text-align: center; padding: 64px 0; color: var(--muted); font-size: 13.5px; }
+  .fb-empty .coupe { width: 40px; height: 40px; margin: 0 auto 18px; }
+  .fb-empty small { display: block; margin-top: 6px; color: var(--faint); }
 </style>
 <div class="lab" data-pal="brass">
-  <div class="wrap lab-head">
-    <h1 class="mark"><em>slosh<span class="tip">bot</span></em> <small>real events · tactile · brass</small></h1>
-    <p>Real events by day. Above 65% booze confidence shows by default; the rest of each day
-      tucks into “N more, lower confidence.”</p>
+  <div class="fb">
+    <div class="wrap">
+      <p class="fb-mark"><em>slosh<span class="tip">bot</span></em></p>
+
+      <div class="fb-ctl thresh">
+        <span class="fb-lbl">booze at least</span>
+        <div class="thresh-track">
+          <span class="thresh-line"></span>
+          <span class="thresh-fill" id="threshFill"></span>
+          <input type="range" min="0" max="100" step="1" value="65"
+                 class="thresh-range" id="threshRange"
+                 aria-label="minimum booze confidence percent">
+          <span class="thresh-thumb" id="threshThumb">
+            <span class="coupe" style="--p:65">
+              <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+            </span>
+          </span>
+        </div>
+        <span class="thresh-read" id="threshRead">65%</span>
+      </div>
+
+      <div class="fb-ctl">
+        <span class="fb-lbl">within</span>
+        <div class="fb-seg" id="distSeg" role="group" aria-label="distance cap">
+          <button type="button" data-mi="" aria-current="true">any</button>
+          <button type="button" data-mi="1">1mi</button>
+          <button type="button" data-mi="2">2mi</button>
+          <button type="button" data-mi="3">3mi</button>
+          <button type="button" data-mi="5">5mi</button>
+        </div>
+      </div>
+
+      <button type="button" class="fb-stamp" id="freeToggle" aria-pressed="false">free only</button>
+
+      <div class="fb-tags">
+        <button type="button" class="fb-tags-btn" id="tagsBtn" aria-expanded="false">tags</button>
+        <div class="fb-panel" id="tagsPanel"></div>
+      </div>
+    </div>
   </div>
-  <div class="wrap"><div id="real"><section class="day"><div class="dayhead"><span class="dow">Wednesday</span><span class="date">JUL 8</span><span class="cnt">2 events</span></div><div class="stack"><article class="ta-card confident">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">AI Founders Happy Hour</a></span>
-        <span class="coupe " style="--p:92" title="booze 92% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">6:00 PM · <span class="free">free</span> · The Pearl (Dogpatch) · by Cerebral Valley · <span class="rsvp" style="color:var(--gold-dim)">approval</span></div>
-      <p class="ta-why">Explicit &#x27;open bar&#x27; in description; two drink sponsors listed.</p>
-      <div class="ta-foot"><div class="ta-tags"><span>networking</span><span>party</span></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article><article class="ta-card confident">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">Gallery Opening: New Coastal Works</a></span>
-        <span class="coupe " style="--p:75" title="booze 75% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">7:00 PM · <span class="free">free</span> · Slash SF (Mission) · by Slash Gallery</div>
-      <p class="ta-why">Gallery openings reliably pour wine; &#x27;reception&#x27; language present.</p>
-      <div class="ta-foot"><div class="ta-tags"><span>art</span></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article></div></section><section class="day"><div class="dayhead"><span class="dow">Thursday</span><span class="date">JUL 9</span><span class="cnt">1 event</span></div><div class="stack"><article class="ta-card confident">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">Fintech Product Launch Party</a></span>
-        <span class="coupe " style="--p:88" title="booze 88% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">5:00 PM · <span class="free">free</span> · SVN West (SoMa) · by Mercury · <span class="rsvp" style="color:var(--gold-dim)">application</span></div>
-      <p class="ta-why">&#x27;Cocktails and canapés provided&#x27; in description; corporate sponsor.</p>
-      <div class="ta-foot"><div class="ta-tags"><span>networking</span><span>party</span></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article></div></section><section class="day"><div class="dayhead"><span class="dow">Friday</span><span class="date">JUL 10</span><span class="cnt">2 events</span></div><div class="stack"><article class="ta-card confident">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">Climate Tech Networking Night</a></span>
-        <span class="coupe " style="--p:70" title="booze 70% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">6:00 PM · <span class="free">free</span> · Shack15 (Embarcadero) · by SF Climate Week · <span class="rsvp" style="color:var(--gold-dim)">approval</span></div>
-      <p class="ta-why">Sponsored networking at Shack15 — host&#x27;s past events had a bar.</p>
-      <div class="ta-foot"><div class="ta-tags"><span>climate</span><span>networking</span></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article></div><details class="more"><summary>1 more · lower confidence</summary><div class="stack"><article class="ta-card maybe low">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">SF Beer Week Kickoff</a></span>
-        <span class="coupe dim" style="--p:30" title="booze 30% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">6:00 PM · <span class="free">free</span> · Fort Mason (Marina) · by SF Brewers Guild</div>
-      <p class="ta-why">Beer-centric but ticketed tastings — drinks are paid, not free.</p>
-      <div class="ta-foot"><div class="ta-tags"><span>festival</span></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article></div></details></section><section class="day"><div class="dayhead"><span class="dow">Saturday</span><span class="date">JUL 11</span><span class="cnt">2 events</span></div><details class="more"><summary>2 more · lower confidence</summary><div class="stack"><article class="ta-card maybe">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">Design Systems Meetup</a></span>
-        <span class="coupe dim" style="--p:55" title="booze 55% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">6:00 PM · <span class="free">free</span> · Figma HQ (SoMa) · by SF Design Guild</div>
-      <p class="ta-why">Corporate-hosted meetup — beer/wine likely but unstated.</p>
-      <div class="ta-foot"><div class="ta-tags"><span>networking</span><span>talk</span></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article><article class="ta-card maybe low">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">Free Yoga in Dolores Park</a></span>
-        <span class="coupe dim" style="--p:10" title="booze 2% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">10:00 AM · <span class="free">free</span> · Dolores Park (Mission) · by SF Rec &amp; Parks</div>
-      <p class="ta-why">Morning fitness event — no alcohol plausible.</p>
-      <div class="ta-foot"><div class="ta-tags"></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article></div></details></section><section class="day"><div class="dayhead"><span class="dow">Sunday</span><span class="date">JUL 12</span><span class="cnt">1 event</span></div><details class="more"><summary>1 more · lower confidence</summary><div class="stack"><article class="ta-card maybe low">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">Warehouse Vinyl Night</a></span>
-        <span class="coupe dim" style="--p:15" title="booze 15% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">9:00 PM · <span class="free">free</span> · Undisclosed, SoMa (SoMa) · by Secret Disco · <span class="rsvp" style="color:var(--gold-dim)">waitlist</span></div>
-      <p class="ta-why">Cash bar almost certain at a ticketed warehouse party.</p>
-      <div class="ta-foot"><div class="ta-tags"><span>music</span><span>party</span></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article></div></details></section><section class="day"><div class="dayhead"><span class="dow">Monday</span><span class="date">JUL 13</span><span class="cnt">1 event</span></div><div class="stack"><article class="ta-card confident">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">Startup Demo Day + Reception</a></span>
-        <span class="coupe " style="--p:82" title="booze 82% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">4:00 PM · <span class="free">free</span> · The Village (Mid-Market) · by Alchemist Accelerator</div>
-      <p class="ta-why">&#x27;Reception to follow&#x27; — demo day receptions reliably have open wine/beer.</p>
-      <div class="ta-foot"><div class="ta-tags"><span>networking</span></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article></div></section><section class="day"><div class="dayhead"><span class="dow">Tuesday</span><span class="date">JUL 14</span><span class="cnt">1 event</span></div><details class="more"><summary>1 more · lower confidence</summary><div class="stack"><article class="ta-card maybe low">
-      <div class="ta-top">
-        <span class="ta-title"><a href="#">Neighborhood Cleanup + Coffee</a></span>
-        <span class="coupe dim" style="--p:10" title="booze 1% likely">
-          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
-        </span>
-      </div>
-      <div class="ta-meta">9:00 AM · <span class="free">free</span> · Alamo Square (NoPa) · by Refuse Refuse</div>
-      <p class="ta-why">Morning volunteer event with coffee.</p>
-      <div class="ta-foot"><div class="ta-tags"></div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
-    </article></div></details></section></div></div>
+
+  <div class="wrap"><div id="real"></div></div>
 </div>
+
+<script id="events-data" type="application/json">[{"id":"luma:evt-wHGgJpPvrSCyCgH","title":"Punk Software Hack Night: Build Tools That Work for You","venue_name":"Civic Center","neighborhood":"Civic Center","host_name":"Imbue Events","starts_at":"2026-07-07T17:30:00-07:00","is_free":false,"rsvp_type":"waitlist","distance_mi":1.3,"booze":81,"rationale":"Evening hack night (high base rate for free drinks in SF startup scene) hosted by venture-backed AI company (Imbue) with explicit language 'grab food and drinks' at 5:30pm doors-open social phase, no ticket price listed, and typical sponsor-hosted format all point to hosted bar. [host record: 1/1 delivered drinks as promised \u2192 adjusted 0.72\u21920.81]","tags":["ai"]},{"id":"luma:evt-OkFW0Db2xbmPqFi","title":"IB Founder-First Series #1: Finding a Co-Founder","venue_name":"47122 Mission Falls Ct, Fremont","neighborhood":"East Industrial","host_name":"Innovate Bay","starts_at":"2026-07-07T18:00:00-07:00","is_free":false,"rsvp_type":"waitlist","distance_mi":34.44,"booze":72,"rationale":"Evening founder-focused networking event hosted by Innovate Bay (startup-scene organization) with explicit statement 'Food and drinks will be provided'\u2014no ticket price mentioned and no language suggesting cash bar or paid drinks, aligning with high base rate for free evening socials in SF startup community.","tags":["tech"]},{"id":"funcheap:scabmuggers-harvard-bully-free-strikers-berkeley","title":"Scabmuggers: Harvard vs. Bully \u2013 Free for Strikers (Berkeley)","venue_name":"THE FREIGHT","neighborhood":null,"host_name":"secure.thefreight.org","starts_at":"2026-07-07T19:00:00-07:00","is_free":true,"rsvp_type":null,"distance_mi":11.82,"booze":52,"rationale":"Free evening theatrical/social event at a venue (THE FREIGHT, likely a bar/performance space) with no explicit drink mention, but the base rate for SF free evening socials is high; however, the labor/strike theme and play-focused nature slightly tempers typical social-event assumptions.","tags":[]},{"id":"funcheap:horse-comedy-melissa-strype-meaghan-strickland-live-sf","title":"Horse Around Comedy: Melissa Strype + Meaghan Strickland Live (SF)","venue_name":"The Lost Church","neighborhood":null,"host_name":"thelostchurch.my.salesforce-sites.com","starts_at":"2026-07-07T20:15:00-07:00","is_free":false,"rsvp_type":null,"distance_mi":2.83,"booze":18,"rationale":"Paid comedy show ($15 ticket) at a venue with no mention of hosted drinks, sponsor logos, or free alcohol; comedy clubs and ticketed performances typically operate on a cash-bar model, not free-drink events.","tags":["comedy"]},{"id":"funcheap:6-drive-in-movie-night-in-concord-san-jose-195","title":"$6 Drive-In Movie Night in Concord &#038; San Jose","venue_name":"Solano 2 Drive In","neighborhood":null,"host_name":"www.westwinddi.com","starts_at":"2026-07-07T20:30:00-07:00","is_free":false,"rsvp_type":null,"distance_mi":26.81,"booze":8,"rationale":"This is a low-cost drive-in movie screening ($6 ticket) with no mention of alcohol, drinks, hosts, or sponsors; the event is framed as family entertainment (\"Family Fun Night\"), outdoors in a public space, with no venue bar or drink-service signals\u2014all indicators point to a dry event.","tags":[]},{"id":"meetup:315418947","title":"How to Easily Make Sales from Networking -- a Virtual MasterClass","venue_name":"Online event","neighborhood":null,"host_name":"Women's Leadership Alliance","starts_at":"2026-07-08T14:00:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":null,"booze":2,"rationale":"This is an online educational masterclass (not a social/networking event with drinks), free-ticket but entirely virtual with no venue, no alcohol mentions, no food/reception language, and no host signals (sponsor logos, bar venue, drink language) that would indicate complimentary beverages are provided.","tags":["networking"]},{"id":"funcheap:walnut-creeks-locust-street-festival-2026","title":"Walnut Creek&#8217;s Locust Street Festival 2026","venue_name":"Walnut Creek Downtown","neighborhood":null,"host_name":"walnutcreekdowntown.com","starts_at":"2026-07-08T17:00:00-07:00","is_free":true,"rsvp_type":null,"distance_mi":22.68,"booze":22,"rationale":"Outdoor street festival with food vendors and entertainment in a suburban downtown area (Walnut Creek, not SF); 'Sips' mentioned but no explicit 'free drinks,' 'open bar,' or 'hosted alcohol' language; food-and-vendor framing typical of community festivals where alcohol is usually available for purchase, not complimentary; lack of sponsor logos or explicit alcohol provision signals indicates attendees likely buy their own drinks.","tags":["music","festival"]},{"id":"luma:evt-HgUllnBnhwsArEg","title":"Food for Thought [Day 1]","venue_name":"900 Innes Ave, San Francisco","neighborhood":"India Basin","host_name":"Future of Us","starts_at":"2026-07-08T17:00:00-07:00","is_free":false,"rsvp_type":"approval","distance_mi":4.62,"booze":12,"rationale":"This is a paid dinner event ($25-$35 ticket) framed around food service with no mention of alcoholic drinks, sponsors providing beverages, open bar, or reception drinks \u2014 the listing focuses entirely on the meal menu and community experience, placing it clearly in the food-framed casual social category with no separate alcohol signals.","tags":["food","festival"]},{"id":"luma:evt-NXqxJqMAJsw05jC","title":"YC Founders Wine & Cocktails Mixer","venue_name":"2 Sacramento St Street Level, Embarcadero 2, 2 Embarcadero Ctr, San Francisco","neighborhood":"Financial District","host_name":"Murray - Open Future Forum and Friends 2","starts_at":"2026-07-08T17:30:00-07:00","is_free":false,"rsvp_type":"approval","distance_mi":3.04,"booze":82,"rationale":"YC founder mixers with explicit 'wine tasting' and 'cocktails' language, multiple corporate sponsors (Silicon Valley Bank, Foley & Lardner), evening social format (5:30\u20137:30 PM), and high-quality venue in Financial District are strongly associated with hosted open bars; the sponsor roster and founder-community positioning indicate this is a professionally-hosted event, not a cash bar.","tags":["tech","networking","tasting"]},{"id":"luma:evt-nLJkCfxaQZMhCx2","title":"Oakland Climate Changemakers Hour of Action","venue_name":"4115 Telegraph Ave, Oakland","neighborhood":"Temescal","host_name":"Oakland Climate Changemakers","starts_at":"2026-07-08T17:30:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":10.69,"booze":52,"rationale":"Free evening community meetup with explicit 'grab a drink' language in the agenda (5:30\u20136pm social segment), matching the high base rate for SF/Bay Area social advocacy events that provide free drinks; nonprofit climate org hosting suggests volunteer-friendly setup with hosted refreshments, though no explicit 'open bar' or sponsor language moderates the score slightly.","tags":["climate"]},{"id":"luma:evt-jxiTE9tTsoF7Qrk","title":"YC Founder Headshots \ud83d\udcf8","venue_name":"9 Claude Ln, San Francisco","neighborhood":"Union Square","host_name":"Arc Community Events","starts_at":"2026-07-09T12:00:00-07:00","is_free":false,"rsvp_type":"approval","distance_mi":2.61,"booze":92,"rationale":"Explicit statement 'Free drinks + smoothies on us' combined with high base rate for YC founder social events, startup-scene host (Arc Community Events), and venue (Corgi Cafe, a founder-friendly space) all point to genuinely complimentary beverages.","tags":["tech"]},{"id":"meetup:315135639","title":"TransDimensional Mapping (Remote Viewing): Do we live in a Simulation?","venue_name":"Online event","neighborhood":null,"host_name":"The Larger Universe","starts_at":"2026-07-09T17:00:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":null,"booze":2,"rationale":"Online Zoom event with no venue, no food/beverage service possible, no sponsorship or host signals, and no mention of drinks\u2014remote presentations cannot serve alcohol to attendees.","tags":[]},{"id":"meetup:315495570","title":"Dog Owners and Dog Lovers Social in Nob Hill","venue_name":"Huntington Park","neighborhood":null,"host_name":"Gist IRL SF","starts_at":"2026-07-09T18:00:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":2.34,"booze":18,"rationale":"This is a free evening social event (high base rate indicator), BUT the core activity concludes at 7:25pm, after which attendees self-select groups and walk to nearby BAR VENUES (Peacekeeper, Wreck Room, Liquid Gold, Nook) where they will \"grab drinks\" \u2014 these are clearly commercial bars with no mention of hosted/complimentary drinks, making this a pay-your-own-drinks scenario despite the free initial mixer component.","tags":[]},{"id":"luma:evt-FjlOMkWEDr9uVAi","title":"Whop Private Dinner [SF]","venue_name":"Union Square","neighborhood":"Union Square","host_name":"Personal","starts_at":"2026-07-09T18:30:00-07:00","is_free":false,"rsvp_type":"approval","distance_mi":2.53,"booze":62,"rationale":"Private dinner event for founders and investors in SF (high-base-rate social gathering), but 'private' framing and lack of explicit drink mention or venue details prevent scoring higher; intimate founder dinners often include hosted drinks but lack of confirmation keeps this in the upper-moderate range rather than 0.75+.","tags":["tech"]},{"id":"luma:evt-AucCZbU0aG094bB","title":"Breaking the Starving Artist Myth: What Michelangelo Knew About Business","venue_name":"1900 Telegraph Ave, Oakland","neighborhood":"Downtown Oakland","host_name":"Big Brain Lectures - Bay Area","starts_at":"2026-07-09T19:00:00-07:00","is_free":false,"rsvp_type":"open","distance_mi":9.93,"booze":15,"rationale":"This is a paid ticketed lecture ($27) held at a bar venue (21+ requirement signals a bar, not a restaurant or community space), with no explicit mention of complimentary drinks, hosted bar, reception, or sponsor-provided alcohol\u2014matching the pattern of paid events at bar venues that default to cash bar.","tags":["art","talk"]},{"id":"luma:evt-HoisDvWXH0YI7RF","title":"2026 MetaDAO Owners Meeting","venue_name":"Union Square","neighborhood":"Union Square","host_name":"Colosseum","starts_at":"2026-07-10T10:00:00-07:00","is_free":false,"rsvp_type":"approval","distance_mi":2.59,"booze":92,"rationale":"The listing explicitly states 'drinks...will be provided to all participants' as part of a full-day hosted event with meals and merch, and the host (Colosseum, a venture-backed entity) and event type (corporate founders/investors gathering) both strongly reinforce hosted bar norms.","tags":["crypto"]},{"id":"funcheap:free-summer-sci-fi-movie-series-sf","title":"Free Summer Sci-Fi Movie Series (SF)","venue_name":"Tillage","neighborhood":null,"host_name":"partiful.com","starts_at":"2026-07-10T18:30:00-07:00","is_free":true,"rsvp_type":null,"distance_mi":1.6,"booze":15,"rationale":"Food and drinks are explicitly 'available for purchase' (cash bar model), the event is a movie screening (not a social gathering or party), no sponsor, no hosted bar language, and the $5 concessions voucher is for seating priority\u2014not a drink inclusion.","tags":[]},{"id":"funcheap:sfs-2026-shakespeare-trash-bard-rubbish-soma","title":"SF&#8217;s 2026 Shakespeare in the Trash: Bard Goes Rubbish (SOMA)","venue_name":"SOMA West Trash Yard","neighborhood":null,"host_name":"www.eventbrite.com","starts_at":"2026-07-10T18:30:00-07:00","is_free":true,"rsvp_type":null,"distance_mi":1.58,"booze":12,"rationale":"Free outdoor theatrical performance with explicit BYOB language ('bring thy own meats and mead') and nearby food vendors mentioned instead of hosted refreshments\u2014no evidence of sponsor-provided or complimentary alcohol, and the venue is a trash yard (not a bar/nightlife space), placing this squarely in the low range for free drinks.","tags":[]},{"id":"funcheap:5-tix-hairspray-broadway-musical-live-sf-july-10sept-12","title":"$5 Off Tix: \u201cHairspray\u201d The Broadway Musical Live in SF (July 10-Sept. 12)","venue_name":"San Francisco Playhouse","neighborhood":null,"host_name":"www.sfplayhouse.org","starts_at":"2026-07-10T20:00:00-07:00","is_free":false,"rsvp_type":null,"distance_mi":2.31,"booze":5,"rationale":"This is a ticketed theatrical production (Broadway musical at a playhouse) with a $47 ticket price and no mention of any complimentary drinks, reception, or hosted bar \u2014 theater performances are not social events with alcohol service, and the listing contains zero drink-related language.","tags":["comedy","music"]},{"id":"eventbrite:1988576100648","title":"Louie Vega Presented By Public Works & 15Utah","venue_name":"Public Works","neighborhood":null,"host_name":"Public Works","starts_at":"2026-07-10T21:30:00-07:00","is_free":false,"rsvp_type":"open","distance_mi":1.42,"booze":22,"rationale":"Ticketed nightclub DJ event (cover charge of $43.17) at a nightlife venue (Public Works is a known SF club/dance space); cover charge is a negative signal for free drinks, and no explicit language about complimentary or hosted alcohol; defaults to cash bar model.","tags":["music","party"]},{"id":"luma:evt-IBwFEZ0MSimei3x","title":"The Vakathon","venue_name":null,"neighborhood":null,"host_name":"Vakathon Team","starts_at":"2026-07-11T09:00:00-07:00","is_free":true,"rsvp_type":"waitlist","distance_mi":26.91,"booze":8,"rationale":"This is a youth hackathon (high schoolers and below) with no mention of alcohol, beverages, or food; the age restriction alone makes free alcoholic drinks extremely unlikely, and the listing contains zero signals of hosted drinks or venue amenities typical of adult social events.","tags":["tech","hackathon"]},{"id":"luma:evt-0G2vO2GdfSxwZxC","title":"Founders Running Club :: SF","venue_name":"San Francisco","neighborhood":"Panhandle","host_name":"Founders Running Club","starts_at":"2026-07-11T09:30:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":0.27,"booze":22,"rationale":"This is a morning fitness event (weekly run) with post-activity coffee/brunch, not an evening social; no alcohol is mentioned, and the activity frame is exercise and networking rather than a social gathering where free drinks are normative\u2014the sponsor (MongoDB) is providing run logistics, not drink service.","tags":["fitness","tech","networking"]},{"id":"meetup:315462499","title":"[In-Person Event] All-Levels Mandarin Language Exchange","venue_name":"Book Passage","neighborhood":null,"host_name":"SF Chinese-English Language Exchange Meetup Group","starts_at":"2026-07-11T14:00:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":3.32,"booze":15,"rationale":"Free casual language meetup at a bookstore venue (not a bar/restaurant), no explicit mention of alcohol, food, or drinks, and framed as an educational social gathering rather than an evening social event where the BASE RATE for free drinks applies.","tags":[]},{"id":"meetup:315318937","title":"The Astrology of Place: Exploring Astrocartography & Relocation","venue_name":"Online event","neighborhood":null,"host_name":"Adventures In Astrology","starts_at":"2026-07-11T14:00:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":null,"booze":2,"rationale":"Online educational class (intermediate astrology workshop) with no venue, no bar, no social/networking framing, and no mention of food or drinks\u2014this is a paid craft/educational event pattern that defaults to no alcohol service.","tags":[]},{"id":"luma:evt-SaMDLtRo3ocdMVI","title":"Future of Us: Wrap Party!","venue_name":"601 19th St, San Francisco","neighborhood":"Dogpatch","host_name":"Future of Us","starts_at":"2026-07-11T19:00:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":3.13,"booze":85,"rationale":"The listing explicitly states 'open bar' in the event description, and this is a free-to-attend festival wrap party at a venue (The Pearl rooftop) with a clear civic/arts mission and hosted programming, making free drinks highly probable despite the food section mentioning 'non-alcoholic beverages' as an addendum.","tags":["art","party","music","festival"]},{"id":"funcheap:free-kids-soccer-demo-day-balboa-park-location-sf","title":"Free Kids Soccer Demo Day: New Balboa Park Location (SF)","venue_name":"Balboa Park - San Francisco Balboa Park","neighborhood":null,"host_name":"linktr.ee","starts_at":"2026-07-12T08:55:00-07:00","is_free":true,"rsvp_type":null,"distance_mi":null,"booze":2,"rationale":"This is a family youth soccer demo day held in an outdoor public park during morning hours (8:55am start); no alcohol is mentioned, relevant, or culturally appropriate for a children's sports event, and morning family fitness events score very low per calibration rules.","tags":["networking"]},{"id":"luma:evt-ulP3sRuaXXMRuDZ","title":"Booked, busy & Buttered","venue_name":"Duboce Park, Scott St, San Francisco","neighborhood":"Duboce Triangle","host_name":"Booked, Busy & Buttered","starts_at":"2026-07-12T11:45:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":0.65,"booze":8,"rationale":"Midday outdoor potluck book club in a public park (11:45 AM\u20132:45 PM) with explicit focus on homemade dishes and food-sharing; no mention of alcohol, beverages, bar, sponsor, or any drink service whatsoever\u2014food-framed casual social with zero alcohol signals.","tags":["art","food"]},{"id":"luma:evt-hiWmoFR1IzoaDNm","title":"Future of Us: After Party!","venue_name":"601 19th St, San Francisco","neighborhood":"Dogpatch","host_name":"Future of Us","starts_at":"2026-07-12T18:00:00-07:00","is_free":false,"rsvp_type":"open","distance_mi":3.13,"booze":85,"rationale":"The listing explicitly states 'Open Bar: Enjoy our rooftop + lounge bars' \u2014 clear evidence of hosted alcoholic drinks; this is a ticketed evening social/celebration event ($75\u2013$150) at a venue in SF with live music and DJ, hosted by a nonprofit, fitting the pattern of arts/community events that provide complimentary drinks.","tags":["art","party","music","festival","food"]},{"id":"eventbrite:1992180466403","title":"WRISE San Francisco Bay Area Small Group Dinner","venue_name":"Fang","neighborhood":null,"host_name":"WRISE San Francisco - Bay Area","starts_at":"2026-07-12T18:00:00-07:00","is_free":false,"rsvp_type":"open","distance_mi":2.69,"booze":22,"rationale":"Paid dinner ticket ($48.24) frames this as a food-centric event with no explicit mention of alcohol or hosted drinks; the renewable energy industry professional context suggests a formal networking dinner rather than a social gathering with complimentary bar service.","tags":["business","networking"]},{"id":"eventbrite:743284252207","title":"Latin Sundays at Providence Bar","venue_name":"1351 Polk St","neighborhood":null,"host_name":"Latin Sundays SF","starts_at":"2026-07-12T22:00:00-07:00","is_free":false,"rsvp_type":"open","distance_mi":1.87,"booze":15,"rationale":"Ticketed nightclub/DJ event at a bar venue with cover charge ($0\u2013$10 entry) and no explicit mention of free drinks; per calibration rules, bar venues with covers default to pay-your-own-drinks unless hosted alcohol is explicitly promised.","tags":["music","party"]},{"id":"dothebay:17479300","title":"Thrive City Soccer Viewings","venue_name":"Thrive City","neighborhood":null,"host_name":null,"starts_at":"2026-07-13T09:00:00-07:00","is_free":true,"rsvp_type":null,"distance_mi":3.16,"booze":18,"rationale":"Outdoor public plaza viewing event with no mention of alcohol, food, sponsors, or venue amenities beyond lawn chairs; free admission and daytime/evening casual sport broadcast format suggest a dry community event, consistent with family-friendly outdoor public space norms.","tags":[]},{"id":"funcheap:japanese-tea-gardens-free-admission-hour-golden-gate-park-401","title":"Japanese Tea Garden\u2019s Free Admission Hour (Golden Gate Park)","venue_name":"Japanese Tea Garden","neighborhood":null,"host_name":"www.japaneseteagardensf.com","starts_at":"2026-07-13T09:00:00-07:00","is_free":true,"rsvp_type":null,"distance_mi":1.29,"booze":2,"rationale":"This is an outdoor garden attraction with no mention of alcohol, food, dining, or any beverage service\u2014only admission to a park garden during free hours; morning timing (9-10 am) and garden-based venue norms make free drinks extremely unlikely.","tags":[]},{"id":"luma:evt-Fz7SPUFnWGeUiIc","title":"Airtable Bay Area | EV01: Off-Label Builds","venue_name":"Three Embarcadero Center, Embarcadero Ctr Lobby Level, San Francisco","neighborhood":"Financial District","host_name":"Airtable Partners & Community","starts_at":"2026-07-13T17:30:00-07:00","is_free":true,"rsvp_type":"open","distance_mi":3.1,"booze":92,"rationale":"Explicit statement 'Drinks and light bites will be provided' clearly indicates hosted/free alcohol; event is a free evening builder social hosted by Airtable (tech company with resources) at a professional venue, matching the high base rate for SF community tech meetups with confirmed drink language.","tags":["tech","talk"]},{"id":"funcheap:cyberpunk-cinema-night-mission-dist-144","title":"Cyberpunk Cinema Night | Mission Dist.","venue_name":"The Knockout","neighborhood":null,"host_name":"cyberpunkcinema.tumblr.com","starts_at":"2026-07-13T18:30:00-07:00","is_free":true,"rsvp_type":null,"distance_mi":2.22,"booze":52,"rationale":"Free evening social event (cinema screening) held at a bar venue (The Knockout) with no explicit drink language; base rate for SF evening socials is high (0.45\u20130.6), but the bar-as-venue pattern and lack of sponsor/host commitment slightly tempers upward movement into the middle-upper range.","tags":[]},{"id":"eventbrite:1991497688195","title":"Pink Floyd - Wish You Were Here: LISTEN | Envelop SF (7:30 pm)","venue_name":"Envelop SF","neighborhood":null,"host_name":"Envelop","starts_at":"2026-07-13T19:30:00-07:00","is_free":false,"rsvp_type":"open","distance_mi":3.53,"booze":12,"rationale":"Ticketed listening event ($27 admission) at a specialized audio venue with no mention of drinks, food, reception, or host/sponsor provision\u2014aligns with paid craft experience pattern, not a social gathering or venue with bar service.","tags":["music","party"]},{"id":"luma:evt-MBrh6VclsqD5MvE","title":"\ud83e\udd42 JustAI Series A Celebration","venue_name":"Mission District","neighborhood":"Mission District","host_name":"Personal","starts_at":"2026-07-14T18:00:00-07:00","is_free":false,"rsvp_type":"approval","distance_mi":1.66,"booze":98,"rationale":"The listing explicitly states 'Expect an open bar' multiple times with celebratory language ('raise a glass'), company Series A funding context (high likelihood of sponsor funding), and venue-agnostic celebration framing\u2014this is unambiguous evidence of free hosted alcohol.","tags":["tech","talk"]}]</script>
 <script>
-  document.querySelectorAll("[data-stamp]").forEach(b => b.addEventListener("click", () => {
-    const on=b.classList.toggle("stamped");
-    if(on) b.parentElement.querySelectorAll("[data-stamp]").forEach(s=>{if(s!==b)s.classList.remove("stamped");});
-  }));
+(function () {
+  // home: settings.home_lat/home_lon (lat 37.770518, lon -122.4451024)
+  const EVENTS = JSON.parse(document.getElementById("events-data").textContent);
+
+  const state = { thresh: 65, maxMi: null, freeOnly: false, tags: new Set() };
+
+  // ---- helpers ----
+  function cleanVenue(name) {
+    if (!name) return "";
+    // scraped venue_name sometimes carries a full street address after a comma
+    const idx = name.indexOf(",");
+    return (idx === -1 ? name : name.slice(0, idx)).trim();
+  }
+
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+
+  function dayKey(iso) { return iso.slice(0, 10); }
+
+  function fmtDow(iso) {
+    return new Date(iso).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/Los_Angeles" });
+  }
+
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    const mon = d.toLocaleDateString("en-US", { month: "short", timeZone: "America/Los_Angeles" }).toUpperCase();
+    const day = d.toLocaleDateString("en-US", { day: "numeric", timeZone: "America/Los_Angeles" });
+    return mon + " " + day;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // ---- tag catalog (built once from the full dataset) ----
+  const tagCounts = new Map();
+  EVENTS.forEach(e => (e.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+  const allTags = [...tagCounts.keys()].sort((a, b) => tagCounts.get(b) - tagCounts.get(a));
+
+  function buildTagsPanel() {
+    const panel = document.getElementById("tagsPanel");
+    panel.innerHTML = allTags.map(t =>
+      `<button type="button" class="fb-chip" data-tag="${escapeHtml(t)}">${escapeHtml(t)}<span class="n">${tagCounts.get(t)}</span></button>`
+    ).join("");
+    panel.querySelectorAll(".fb-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const t = chip.dataset.tag;
+        if (state.tags.has(t)) state.tags.delete(t); else state.tags.add(t);
+        chip.classList.toggle("on", state.tags.has(t));
+        updateTagsBtn();
+        render();
+      });
+    });
+  }
+
+  function updateTagsBtn() {
+    const btn = document.getElementById("tagsBtn");
+    if (state.tags.size) {
+      btn.textContent = "tags · " + state.tags.size;
+      btn.classList.add("active");
+    } else {
+      btn.textContent = "tags";
+      btn.classList.remove("active");
+    }
+  }
+
+  // ---- filtering ----
+  // distance: events with unknown (null) distance are never dropped by the cap,
+  // matching app/main.py's list_events behavior around the max_mi filter.
+  function passesHardFilters(e) {
+    if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi > state.maxMi) return false;
+    if (state.freeOnly && !e.is_free) return false;
+    if (state.tags.size && !(e.tags || []).some(t => state.tags.has(t))) return false;
+    return true;
+  }
+
+  function cardHtml(e) {
+    const confident = e.booze >= state.thresh;
+    const tierClass = confident ? "confident" : (e.booze < 25 ? "maybe low" : "maybe");
+    const dim = confident ? "" : "dim";
+    const venue = cleanVenue(e.venue_name);
+    const meta = [
+      fmtTime(e.starts_at),
+      e.is_free ? '<span class="free">free</span>' : null,
+      [venue, e.neighborhood ? `(${escapeHtml(e.neighborhood)})` : null].filter(Boolean).join(" "),
+      e.host_name ? "by " + escapeHtml(e.host_name) : null,
+      e.rsvp_type ? `<span class="rsvp" style="color:var(--gold-dim)">${escapeHtml(e.rsvp_type)}</span>` : null,
+    ].filter(Boolean).join(" &middot; ");
+    const tags = (e.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join("");
+    const rationale = escapeHtml(e.rationale || "");
+    return `<article class="ta-card ${tierClass} enter" data-id="${escapeHtml(e.id)}">
+      <div class="ta-top">
+        <span class="ta-title"><a href="#">${escapeHtml(e.title)}</a></span>
+        <span class="coupe ${dim}" style="--p:${e.booze}" title="booze ${e.booze}% likely">
+          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+        </span>
+      </div>
+      <div class="ta-meta">${meta}</div>
+      <p class="ta-why" title="${rationale}">${rationale}</p>
+      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold">+ hold</button></div>
+      <div class="ta-stamp-row"><span class="q">was there booze?</span>
+        <button class="ta-stamp" data-stamp>booze</button>
+        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
+    </article>`;
+  }
+
+  function render() {
+    const root = document.getElementById("real");
+    const byDay = new Map();
+    EVENTS.filter(passesHardFilters).forEach(e => {
+      const k = dayKey(e.starts_at);
+      if (!byDay.has(k)) byDay.set(k, []);
+      byDay.get(k).push(e);
+    });
+
+    const days = [...byDay.keys()].sort();
+    if (!days.length) {
+      root.innerHTML = `<div class="fb-empty">
+        <div class="coupe dim" style="--p:0">
+          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+        </div>
+        nothing above ${state.thresh}% this week &mdash; lower the pour
+        <small>or loosen the distance, free, and tag filters above.</small>
+      </div>`;
+      return;
+    }
+
+    let html = "";
+    days.forEach(k => {
+      const dayEvents = byDay.get(k);
+      const shown = dayEvents.filter(e => e.booze >= state.thresh);
+      const rest = dayEvents.filter(e => e.booze < state.thresh);
+      const first = dayEvents[0];
+      const n = dayEvents.length;
+      html += `<section class="day"><div class="dayhead"><span class="dow">${fmtDow(first.starts_at)}</span><span class="date">${fmtDate(first.starts_at)}</span><span class="cnt">${n} event${n === 1 ? "" : "s"}</span></div>`;
+      if (shown.length) {
+        html += `<div class="stack">${shown.map(cardHtml).join("")}</div>`;
+      }
+      if (rest.length) {
+        html += `<details class="more"><summary>${rest.length} more &middot; lower confidence</summary><div class="stack">${rest.map(cardHtml).join("")}</div></details>`;
+      }
+      html += `</section>`;
+    });
+    root.innerHTML = html;
+    bindStamps();
+    // drop the .enter class after the fade-in so future re-renders animate cleanly
+    requestAnimationFrame(() => {
+      root.querySelectorAll(".ta-card.enter").forEach(c => setTimeout(() => c.classList.remove("enter"), 160));
+    });
+  }
+
+  function bindStamps() {
+    document.querySelectorAll("[data-stamp]").forEach(b => b.addEventListener("click", () => {
+      const on = b.classList.toggle("stamped");
+      if (on) b.parentElement.querySelectorAll("[data-stamp]").forEach(s => { if (s !== b) s.classList.remove("stamped"); });
+    }));
+  }
+
+  // ---- threshold slider ----
+  const threshRange = document.getElementById("threshRange");
+  const threshFill = document.getElementById("threshFill");
+  const threshRead = document.getElementById("threshRead");
+  const threshThumb = document.getElementById("threshThumb");
+
+  function positionThumb(v) {
+    const pct = v; // 0-100 maps directly to track %
+    threshFill.style.width = pct + "%";
+    threshThumb.style.left = pct + "%";
+    threshThumb.querySelector(".coupe").style.setProperty("--p", v);
+    threshThumb.querySelector(".coupe").classList.toggle("dim", v < 25);
+    threshRead.textContent = v + "%";
+  }
+
+  threshRange.addEventListener("input", () => {
+    state.thresh = parseInt(threshRange.value, 10);
+    positionThumb(state.thresh);
+    render();
+  });
+  positionThumb(state.thresh);
+
+  // ---- distance stepper ----
+  const distSeg = document.getElementById("distSeg");
+  distSeg.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
+      btn.setAttribute("aria-current", "true");
+      const mi = btn.dataset.mi;
+      state.maxMi = mi === "" ? null : parseFloat(mi);
+      render();
+    });
+  });
+
+  // ---- free-only toggle ----
+  const freeToggle = document.getElementById("freeToggle");
+  freeToggle.addEventListener("click", () => {
+    state.freeOnly = !state.freeOnly;
+    freeToggle.setAttribute("aria-pressed", String(state.freeOnly));
+    render();
+  });
+
+  // ---- tags popover ----
+  const tagsBtn = document.getElementById("tagsBtn");
+  const tagsPanel = document.getElementById("tagsPanel");
+  buildTagsPanel();
+  tagsBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const open = tagsPanel.classList.toggle("open");
+    tagsBtn.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (ev) => {
+    if (!tagsPanel.contains(ev.target) && ev.target !== tagsBtn) {
+      tagsPanel.classList.remove("open");
+      tagsBtn.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  render();
+})();
 </script>
