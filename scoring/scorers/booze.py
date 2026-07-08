@@ -12,15 +12,19 @@ import re
 MODEL = "claude-haiku-4-5-20251001"
 
 # (pattern, score-if-matched, label). First strong match anchors the heuristic.
+# "Alcohol is present" and "alcohol is free" are different claims — a bar venue
+# or a happy-hour promo is evidence of the former, not the latter, so those no
+# longer score above the confident threshold on text alone.
 SIGNALS = [
     (r"open bar|hosted bar", 0.95, "explicit open/hosted bar"),
     (r"complimentary (drinks|cocktails|wine|beer)", 0.9, "complimentary drinks"),
     (r"drinks (are |will be )?(provided|included|on us)", 0.9, "drinks provided"),
     (r"free (drinks|beer|wine|cocktails|booze)", 0.9, "free drinks"),
-    (r"beer (and|&) wine", 0.7, "beer & wine mentioned"),
-    (r"happy hour", 0.65, "happy hour framing"),
     (r"(wine|cocktail) reception|reception to follow", 0.7, "reception language"),
     (r"refreshments", 0.5, "refreshments (ambiguous)"),
+    (r"beer (and|&) wine", 0.3, "beer & wine mentioned — bar menu language, not sponsorship"),
+    (r"happy hour", 0.2, "happy hour framing — usually discounted, not free"),
+    (r"cover charge", 0.15, "cover charge — paid door, drinks not implied free"),
     (r"cash bar", 0.1, "cash bar — drinks not free"),
     (r"no host bar|no-host bar", 0.1, "no-host bar"),
     (r"byob", 0.15, "BYOB"),
@@ -47,6 +51,8 @@ Calibration rules (learned from ground truth on this scene):
 - PAID craft classes / workshops (garden, paint, pottery, cooking): score ≤0.2 unless free alcohol is EXPLICITLY stated. "Sip and X" with a paid ticket means the drink is bundled into the price — that is NOT free booze.
 - Food-framed casual socials (sandwiches 🥪, lunch, coffee, snacks, potluck): food language is NOT drink evidence. Without separate alcohol signals, stay ≤0.35.
 - Networking events are not automatic: a "founders & friends" mixer without sponsor logos, venue-with-bar, or drink language can easily be dry. Explicit evidence should move you up, not the word "networking" alone.
+- BARS, CLUBS, AND NIGHTLIFE VENUES DEFAULT TO A CASH BAR. The event being held at a bar, having a DJ, or mentioning "happy hour" / drink specials is evidence that alcohol is FOR SALE there, not evidence that it's free to you. Score ≤0.25 for this pattern unless the listing explicitly promises free/hosted/complimentary drinks or an open bar — do not let "there's a bar" push the score up on its own.
+- Ticketed nightclub/DJ nights (cover charge, doors at, 21+ line, RA-style listings) are almost always pay-your-own-drinks. Treat a cover charge as a negative signal for free booze, not a neutral one — paying to get in makes it less likely drinks are also comped.
 - Morning, fitness, family, and outdoor-public-space events stay very low.
 - Use the full 0-1 range and commit; avoid clustering at 0.25/0.75.
 

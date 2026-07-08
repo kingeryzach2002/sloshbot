@@ -15,8 +15,8 @@ from starlette.requests import Request
 
 from db import get_conn, init_db
 from ingest.geocode import _CACHE_DDL, _lookup
-from scoring.weights import (LENSES, MAX_PICKS, WEIGHTS, TIER_CONFIDENT,
-                             TIER_MAYBE, composite, lens_weights, tier)
+from scoring.weights import (LENSES, MAX_PICKS, NEVER_CONFIDENT_SOURCES, WEIGHTS,
+                             TIER_CONFIDENT, TIER_MAYBE, composite, lens_weights, tier)
 
 app = FastAPI(title="sloshbot")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
@@ -184,6 +184,8 @@ def load_events(start: datetime, end: datetime,
         e["rationales"] = rationales.get(e["id"], {})
         e["composite"] = composite(e["scores"], weights)
         e["tier"] = tier(e["scores"], weights) if e["scores"] else "maybe"  # unscored -> maybe, never hidden
+        if e["tier"] == "confident" and e["source"] in NEVER_CONFIDENT_SOURCES:
+            e["tier"] = "maybe"  # nightlife listings never win a confident slot
         e["feedback"] = feedback.get(e["id"], set())
         e["host_rep"] = host_rep.get(e["host_name"]) if e["host_name"] else None
         e["gcal"] = gcal_link(e)

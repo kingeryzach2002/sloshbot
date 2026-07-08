@@ -21,6 +21,12 @@ TIER_MAYBE = 0.40      # >= this -> "maybe"; below -> hidden
 
 MAX_PICKS = 3  # hard cap on top-tier events per day — scarcity is the product
 
+# Nightlife-listing sources (RA, 19hz) are structurally paid-cover / cash-bar
+# club nights, not free-booze mixers — a high booze score there is much more
+# likely to be a scorer false-positive than genuine sponsorship. Never let
+# them compete for a "confident" slot; they can still surface as "maybe".
+NEVER_CONFIDENT_SOURCES = {"ra", "19hz"}
+
 
 def lens_weights(lens: str, base: dict[str, float] | None = None) -> dict[str, float]:
     """Blend weights with the active lens boosted to LENS_BOOST; the rest of the
