@@ -161,12 +161,21 @@ def load_events(start: datetime, end: datetime,
                        else e["start_dt"] + timedelta(hours=2))  # same default as gcal_link
         if e["tier"] != "hidden":
             events.append(e)
-    # Hard cap on the top tier: only the MAX_PICKS best composites stay
-    # "confident"; the overflow demotes to maybe. Scarcity is deliberate.
-    picks = sorted((e for e in events if e["tier"] == "confident"),
-                   key=lambda e: -e["composite"])
-    for e in picks[MAX_PICKS:]:
-        e["tier"] = "maybe"
+    # Hard cap on the top tier, per day: only the MAX_PICKS best composites
+    # each day stay "confident"; the overflow demotes to maybe. Scarcity is
+    # deliberate, but a week-wide cap let a handful of great days anywhere in
+    # the window crowd out every other day's picks — cap by day instead so
+    # every day gets its own shot, and re-run after filters so it stays
+    # filter-sensitive (a tighter distance/tag/booze filter can promote
+    # events that lost the day's competition before).
+    by_day: dict = defaultdict(list)
+    for e in events:
+        if e["tier"] == "confident":
+            by_day[e["start_dt"].date()].append(e)
+    for day_picks in by_day.values():
+        day_picks.sort(key=lambda e: -e["composite"])
+        for e in day_picks[MAX_PICKS:]:
+            e["tier"] = "maybe"
     events.sort(key=lambda e: (e["starts_at"], -e["composite"]))
     return events
 
