@@ -126,9 +126,9 @@
   .ed-foot { display: flex; align-items: center; gap: 14px; margin-top: 14px;
              font-size: 12px; }
   .ed-tags { color: var(--faint); font-style: italic; flex: 1; }
-  .ed-booze { color: var(--gold-dim); letter-spacing: 0.05em; }
-  .ed-entry.confident .ed-booze { color: var(--gold); }
-  .ed-links { display: flex; gap: 12px; margin-top: 12px; font-size: 12.5px; }
+  .ed-links { display: flex; gap: 12px; margin-top: 12px; font-size: 12.5px;
+              align-items: center; flex-wrap: wrap; }
+  .ed-links .q { color: var(--faint); }
   .ed-links a, .ed-links button { color: var(--muted); background: none; border: none;
                  padding: 0; font: inherit; cursor: pointer; text-decoration: none;
                  border-bottom: 1px solid transparent; transition: color .15s, border-color .15s; }
@@ -173,12 +173,10 @@
   .in-kv .v { color: var(--cool); }
   .in-kv .v.free { color: var(--green); }
   .in-kv .v.hi { color: var(--text); }
-  .in-booze { font-family: var(--mono); font-size: 11.5px; color: var(--faint);
-              margin: 11px 0 0; display: flex; align-items: center; gap: 8px; }
-  .in-booze .track { letter-spacing: 2px; }
-  .in-booze .track b { color: var(--gold); }
   .in-tags { font-family: var(--mono); font-size: 11px; color: var(--faint);
              margin-top: 9px; letter-spacing: 0.02em; }
+  .in-q { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+          letter-spacing: 0.08em; color: var(--faint); align-self: center; margin-right: 2px; }
   .in-actions { display: flex; gap: 6px; margin-top: 13px; padding-top: 11px;
                 border-top: 1px solid var(--line); }
   .in-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
@@ -244,15 +242,6 @@
   .ta-meta .free { color: var(--green); }
   .ta-meta .rep { color: var(--green); }
   .ta-why { font-size: 13px; color: var(--muted); margin-top: 9px; }
-  /* poker-chip booze tokens */
-  .ta-chips { display: flex; gap: 4px; align-items: center; margin-top: 11px;
-              font-size: 12px; color: var(--faint); }
-  .ta-chips .chip { width: 13px; height: 13px; border-radius: 50%;
-                    background: repeating-conic-gradient(var(--gold-dim) 0 30deg, transparent 0 60deg),
-                                var(--card2);
-                    border: 1px solid var(--line2); }
-  .ta-chips .chip.on { background: repeating-conic-gradient(#b8862f 0 30deg, var(--gold) 0 60deg);
-                       border-color: var(--gold); }
   .ta-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
   .ta-tags { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; }
   .ta-tags span { font-size: 11px; color: var(--muted); background: var(--card2);
@@ -300,9 +289,10 @@
   <div class="wrap lab-head">
     <h1 class="mark"><em>slosh<span class="tip">bot</span></em> <small>style lab</small></h1>
     <p>Three divergent takes on the event card, each on the <em>same</em> three events —
-      a confident pick, a maybe, and a low-match skip. Every direction keeps your speakeasy
-      ground (warm near-black, scarce gold, one easing curve) and spends its boldness in a
-      single place. Judge them in motion: hover a title, press a button, watch the marks fill.</p>
+      a confident booze bet, a maybe, and a likely dud. One score only: <em>how likely there’s
+      booze</em> (distance is a filter, not a score). Every direction keeps your speakeasy ground
+      (warm near-black, scarce gold, one easing curve) and spends its boldness in a single place.
+      Judge them in motion: hover a title, press a button, watch the marks fill.</p>
   </div>
 
   <!-- =============== A · EDITORIAL =============== -->
@@ -313,10 +303,10 @@
         <h2>Editorial — “The Listing”</h2>
         <p class="thesis">The little black book. No boxes; entries are curated newspaper
           listings separated by hairline rules. Fraunces does the talking. Gold appears
-          exactly twice per confident pick: a marginal rule and the match numeral.</p>
+          exactly twice per confident pick: a marginal rule and the booze numeral.</p>
         <p class="tradeoff"><b>Buys you:</b> calm, taste, a strong point of view; reads like
           something a person curated. <b>Costs you:</b> lower information density and a weaker
-          at-a-glance match signal — best when picks are few and considered.</p>
+          at-a-glance booze signal — best when picks are few and considered.</p>
       </div>
       <div class="deck" id="deck-ed"></div>
     </div>
@@ -329,8 +319,8 @@
         <div class="kicker">Direction B</div>
         <h2>Instrument — “The Readout”</h2>
         <p class="thesis">Lean into the <em>bot</em>. Each card is a measurement channel-strip:
-          monospaced data, a lit status LED, a live match bar. Everything is measured, gridded,
-          quiet. Gold only marks what’s active.</p>
+          monospaced data, a lit status LED, a live booze-confidence bar. Everything is measured,
+          gridded, quiet. Gold only marks what’s active.</p>
         <p class="tradeoff"><b>Buys you:</b> precision, high density, an honest “this is scored
           by a machine” voice; scales to long lists. <b>Costs you:</b> warmth — it can feel
           clinical if the copy doesn’t stay human.</p>
@@ -346,8 +336,8 @@
         <div class="kicker">Direction C</div>
         <h2>Tactile — “The Coaster”</h2>
         <p class="thesis">Cards are physical objects — coasters you pick up. Bevel, top-light,
-          real weight on press. Match is a coupe filled to its level; booze is poker chips;
-          the verdict is a rubber stamp. The confident pick is spotlit off the shelf.</p>
+          real weight on press. The coupe fills to how likely booze is — the one thing we predict —
+          and the verdict is a rubber stamp. The confident pick is spotlit off the shelf.</p>
         <p class="tradeoff"><b>Buys you:</b> delight and memorability; the metaphor is <em>felt</em>,
           not stated. <b>Costs you:</b> restraint — texture and shadow risk tipping into “skeuomorphic
           demo” if overused; needs a disciplined hand.</p>
@@ -362,21 +352,22 @@
 
 <script>
   // ---- the three sample events (identical content across directions) ----
+  // bz = booze confidence (0–100), the one thing we predict; drives the tier.
   const EVENTS = [
-    { tier: "confident", title: "Negroni Hour at The Keep", match: 91, booze: 5,
+    { tier: "confident", title: "Negroni Hour at The Keep", bz: 94,
       time: "8:30 PM", free: true, venue: "The Fireside Room", hood: "Downtown",
       host: "The Keep", rep: "12/12", dist: "0.4", rsvp: "walk-in",
       tags: ["cocktails", "intimate", "walk-in"],
       why: "Classic negronis, low light, no line before 9." },
-    { tier: "maybe", title: "Rooftop Jazz + Spritzes", match: 64, booze: 3,
+    { tier: "maybe", title: "Rooftop Jazz + Spritzes", bz: 68,
       time: "7:00 PM", free: false, venue: "The Aviary", hood: "Midtown",
       host: "Lark Collective", rep: null, dist: "1.8", rsvp: null,
       tags: ["live-music", "rooftop"],
       why: "Great view, but spritz-forward and gets crowded." },
-    { tier: "maybe low", title: "Trivia Tuesday", match: 38, booze: 2,
+    { tier: "maybe low", title: "Trivia Tuesday", bz: 40,
       time: "6:00 PM", free: true, venue: "O’Malley’s", hood: null,
       host: null, rep: null, dist: "2.6", rsvp: null,
-      tags: ["trivia", "casual"], verdict: "skipped",
+      tags: ["trivia", "casual"], verdict: "no_booze",
       why: "Fun crowd, but beer-only and loud." },
   ];
   const isConf = e => e.tier.split(" ")[0] === "confident";
@@ -398,32 +389,31 @@
     <article class="ed-entry ${e.tier}">
       <div class="ed-top">
         <h3 class="ed-title"><a href="#">${esc(e.title)}</a></h3>
-        <div class="ed-score"><span class="lbl">match</span><span class="n">${e.match}</span></div>
+        <div class="ed-score"><span class="lbl">booze</span><span class="n">${e.bz}</span></div>
       </div>
       <div class="ed-meta">${metaLine(e)}</div>
       <p class="ed-why">“${esc(e.why)}”</p>
       <div class="ed-foot">
         <span class="ed-tags">${e.tags.join(" / ")}</span>
-        <span class="ed-booze" title="booze ${e.booze}/5">${"◆".repeat(e.booze)}${"◇".repeat(5-e.booze)}</span>
       </div>
       <div class="ed-links">
         <a class="hold" href="#">hold on calendar</a>
         <span class="sep">·</span>
-        <button data-fb>went</button><span class="sep">·</span><button data-fb>skipped</button>
+        <span class="q">was there booze?</span>
+        <button data-fb>booze</button><span class="sep">·</span><button data-fb>no booze</button>
       </div>
     </article>`).join("");
 
   // ---- B · Instrument ----
   const SEG = 20;
   document.getElementById("deck-in").innerHTML = EVENTS.map(e => {
-    const lit = Math.round(e.match / 100 * SEG);
+    const lit = Math.round(e.bz / 100 * SEG);
     const bars = Array.from({length: SEG}, (_, i) => `<i class="${i < lit ? "on" : ""}"></i>`).join("");
-    const boozeTrack = "▮".repeat(e.booze) + "▯".repeat(5 - e.booze);
     return `
     <article class="in-card ${e.tier}">
       <div class="in-top">
         <span class="in-title"><a href="#">${esc(e.title)}</a></span>
-        <span class="in-readout">MATCH <b>0.${e.match}</b></span>
+        <span class="in-readout">BOOZE <b>0.${e.bz}</b></span>
       </div>
       <div class="in-bar" aria-hidden="true">${bars}</div>
       <div class="in-grid">
@@ -432,13 +422,11 @@
         <div class="in-kv"><span class="k">cost</span><span class="v ${e.free?"free":""}">${e.free?"FREE":"PAID"}</span></div>
         <div class="in-kv"><span class="k">host</span><span class="v">${e.rep || "—"}</span></div>
       </div>
-      <div class="in-booze"><span class="k" style="text-transform:uppercase;letter-spacing:.06em;">booze</span>
-        <span class="track"><b>${boozeTrack.slice(0,e.booze)}</b>${boozeTrack.slice(e.booze)}</span>
-        0.${e.booze*20 || "0"}</div>
       <div class="in-tags">// ${e.tags.join("  ")}</div>
       <div class="in-actions">
-        <button class="in-btn" data-toggle>went</button>
-        <button class="in-btn miss" data-toggle>skip</button>
+        <span class="in-q">booze?</span>
+        <button class="in-btn" data-toggle>yes</button>
+        <button class="in-btn miss" data-toggle>no</button>
         <button class="in-btn hold">+ hold</button>
       </div>
     </article>`;
@@ -446,29 +434,26 @@
 
   // ---- C · Tactile ----
   document.getElementById("deck-ta").innerHTML = EVENTS.map(e => {
-    const chips = Array.from({length:5}, (_,i) => `<span class="chip ${i < e.booze ? "on":""}"></span>`).join("");
     const dim = isConf(e) ? "" : "dim";
-    const stamped = e.verdict ? ` stamped ${e.verdict==="skipped"?"miss":""}` : "";
     return `
     <article class="ta-card ${e.tier}">
       <div class="ta-top">
         <span class="ta-title"><a href="#">${esc(e.title)}</a></span>
-        <span class="coupe ${dim}" style="--p:${Math.max(12,e.match)}" title="match ${e.match}">
+        <span class="coupe ${dim}" style="--p:${Math.max(12,e.bz)}" title="booze ${e.bz}% likely">
           <span class="glass"><span class="liq"></span></span>
           <span class="stem"></span><span class="foot"></span>
         </span>
       </div>
       <div class="ta-meta">${metaLine(e)}</div>
       <p class="ta-why">${esc(e.why)}</p>
-      <div class="ta-chips" title="booze ${e.booze}/5">${chips}<span style="margin-left:4px">🍸</span></div>
       <div class="ta-foot">
         <div class="ta-tags">${e.tags.map(t=>`<span>${t}</span>`).join("")}</div>
         <button class="ta-hold">+ hold</button>
       </div>
       <div class="ta-stamp-row">
-        <span class="q">did you go?</span>
-        <button class="ta-stamp${e.verdict==="went"?" stamped":""}" data-stamp>went</button>
-        <button class="ta-stamp miss${stamped}" data-stamp="miss">skipped</button>
+        <span class="q">was there booze?</span>
+        <button class="ta-stamp${e.verdict==="booze"?" stamped":""}" data-stamp>booze</button>
+        <button class="ta-stamp miss${e.verdict==="no_booze"?" stamped":""}" data-stamp="miss">no booze</button>
       </div>
     </article>`;
   }).join("");
