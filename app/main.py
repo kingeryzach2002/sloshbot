@@ -240,28 +240,35 @@ def layout_day(events: list[dict]) -> list[dict]:
     return blocks
 
 
+CAL_MAX_PER_DAY = 8  # scarcity: only each day's top matches land on the grid
+
+
 @app.get("/calendar", response_class=HTMLResponse)
-def calendar(request: Request):
+def calendar(request: Request, max_mi: float | None = None):
     now = datetime.now()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    events = load_events(today, today + timedelta(days=7))
+    events = load_events(today, today + timedelta(days=7), max_mi)
     by_date = defaultdict(list)
     for e in events:
         by_date[e["start_dt"].date()].append(e)
     days = []
     for i in range(7):
         d = today + timedelta(days=i)
+        day_evts = sorted(by_date.get(d.date(), []), key=lambda e: -e["composite"])
+        shown = day_evts[:CAL_MAX_PER_DAY]
         days.append({
             "label": d.strftime("%a"),
             "num": d.strftime("%-d"),
             "is_today": i == 0,
-            "blocks": layout_day(by_date.get(d.date(), [])),
+            "blocks": layout_day(shown),
+            "hidden": len(day_evts) - len(shown),
         })
     now_min = now.hour * 60 + now.minute
     return templates.TemplateResponse(request, "calendar.html", {
         "days": days,
         "view": "calendar",
         "hours": list(range(8, 24)),
+        "cap": CAL_MAX_PER_DAY,
         "now_pct": ((now_min - CAL_START_MIN) / CAL_SPAN * 100
                     if CAL_START_MIN <= now_min < CAL_END_MIN else None),
     })
