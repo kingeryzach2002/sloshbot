@@ -1,0 +1,23 @@
+# Litestream config: continuous offsite backup of the sloshbot database.
+#
+# What this does: while the app is running, Litestream watches
+# /data/sloshbot.db and streams every change to an S3-compatible bucket
+# (e.g. Cloudflare R2) within seconds. If the server's disk is ever lost,
+# the database can be restored from that bucket instead of starting over.
+#
+# This file only takes effect once the four LITESTREAM_* variables below
+# are set in the hosting dashboard (Settings -> Environment Variables).
+# Until then, start.sh never invokes Litestream at all, so this file is
+# inert — nothing reads it and nothing changes about how the app runs.
+#
+# ${VAR} below is filled in by Litestream from the container's environment
+# at startup; nothing here is a secret by itself.
+dbs:
+  - path: /data/sloshbot.db
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: sloshbot
+      endpoint: ${LITESTREAM_ENDPOINT}
+      access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+      secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}

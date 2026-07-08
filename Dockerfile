@@ -4,6 +4,11 @@ FROM python:3.12-slim
 # distroless image rather than installing via pip/curl.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Litestream binary, via the same image-copy pattern as uv above. Only used
+# if the owner later sets LITESTREAM_BUCKET (see start.sh + litestream.yml);
+# harmless dead weight otherwise.
+COPY --from=litestream/litestream:0.5 /usr/local/bin/litestream /usr/local/bin/litestream
+
 # Event times are stored as Pacific ISO 8601 and the app uses naive
 # datetime.now(); the container clock must agree, or "tonight" drifts.
 ENV TZ=America/Los_Angeles
@@ -30,6 +35,11 @@ COPY . .
 # mount a persistent volume at /data and the app's dockerignore already
 # excludes sloshbot.db* from the build context, so this is belt-and-suspenders.
 ENV SLOSHBOT_DB=/data/sloshbot.db
+
+# Optional Litestream replication config (see litestream.yml for details).
+# Reading this file at startup is itself gated behind LITESTREAM_BUCKET in
+# start.sh, so copying it here is always safe.
+COPY litestream.yml /etc/litestream.yml
 
 EXPOSE 8000
 CMD ["./start.sh"]
