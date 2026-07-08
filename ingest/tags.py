@@ -1,8 +1,10 @@
-"""Derive free-form event tags from source metadata + title/description keywords.
+"""Derive event tags from source metadata + title/description keywords.
 
 Luma and Eventbrite carry structured categories in `raw`; Funcheap (schema.org
-JSON-LD) has none, so keyword tags are the only signal there. Tags are
-lowercase, deduped, capped — an arbitrary set per event, no fixed vocabulary.
+JSON-LD) has none, so keyword tags are the only signal there. Output is
+constrained to ALLOWED_TAGS — the hand-pruned vocabulary (see tags.csv for the
+pruning pass); source categories outside it are mapped in via _RENAME where
+sensible and dropped otherwise.
 """
 from __future__ import annotations
 
@@ -11,34 +13,38 @@ import re
 
 MAX_TAGS = 5
 
+# The pruned vocabulary — the only tags that ever reach event_tags.
+ALLOWED_TAGS = {
+    "music", "party", "festival", "art", "tech", "comedy", "networking",
+    "workshop", "ai", "talk", "food", "business", "climate", "panel", "cooking",
+}
+
 # Keyword patterns matched against title + description (case-insensitive).
+# Every target must be in ALLOWED_TAGS.
 _KEYWORD_TAGS: list[tuple[str, str]] = [
-    (r"happy hour", "happy hour"),
-    (r"hackathon", "hackathon"),
+    (r"happy hour", "party"),
+    (r"hackathon", "tech"),
     (r"\bpanel\b", "panel"),
-    (r"\bmixer\b|networking", "networking"),
+    (r"\bmixer\b|networking|demo day|meetup", "networking"),
     (r"workshop", "workshop"),
-    (r"demo day", "demo day"),
-    (r"launch party|product launch", "launch"),
-    (r"\bparty\b", "party"),
+    (r"launch party|product launch|\bparty\b", "party"),
     (r"comedy|stand[- ]?up|improv", "comedy"),
     (r"\bconcert\b|live music|\bdj\b|open mic", "music"),
     (r"gallery|art show|art opening|exhibition", "art"),
     (r"festival|block party|street fair", "festival"),
-    (r"yoga|run club|pilates|workout|5k\b", "fitness"),
-    (r"trivia", "trivia"),
-    (r"karaoke", "karaoke"),
-    (r"(wine|beer|whiskey|sake|cocktail).{0,20}tasting|tasting room", "tasting"),
+    (r"(wine|beer|whiskey|sake|cocktail).{0,20}tasting|tasting room", "food"),
     (r"pop[- ]?up|food truck|supper club", "food"),
-    (r"book club|author talk|reading", "books"),
-    (r"screening|film festival|movie night", "film"),
+    (r"cooking class|sushi making|baking|sourdough", "cooking"),
     (r"talk\b|fireside|keynote|lecture", "talk"),
+    (r"\bai\b|artificial intelligence|\bllm\b", "ai"),
+    (r"climate", "climate"),
 ]
 
 # Eventbrite tag display names too generic to be worth a chip.
 _EB_SKIP = {"other", "seminar", "class", "expo"}
 
-# Verbose source category names → the shorter keyword-tag vocabulary.
+# Source category names → the pruned vocabulary. Categories not renamed and
+# not already in ALLOWED_TAGS are dropped by the final filter.
 _RENAME = {
     "party or social gathering": "party",
     "class, training, or workshop": "workshop",
@@ -48,7 +54,39 @@ _RENAME = {
     "arts & culture": "art",
     "business & professional": "business",
     "science & technology": "tech",
-    "health & wellness": "wellness",
+    "concert": "music",
+    "dj": "music",
+    "nightlife": "party",
+    "r&b": "music",
+    "reggaeton": "music",
+    "dembow": "music",
+    "bollywood": "music",
+    "world": "music",
+    "alternative": "music",
+    "dayparty": "party",
+    "launch party": "party",
+    "opening": "art",
+    "performing & visual arts": "art",
+    "high tech": "tech",
+    "data_analysis": "tech",
+    "meetup": "networking",
+    "meeting or networking event": "networking",
+    "reception": "networking",
+    "demo day": "networking",
+    "conference": "talk",
+    "lecture": "talk",
+    "foodie": "food",
+    "baking": "cooking",
+    "sourdough": "cooking",
+    "kitchen": "cooking",
+    "career": "business",
+    "careerfair": "business",
+    "employment": "business",
+    "recruitment": "business",
+    "sales & marketing": "business",
+    "smallbusiness": "business",
+    "environment": "climate",
+    "festival or fair": "festival",
 }
 
 
@@ -72,6 +110,7 @@ def extract_tags(source: str, raw: str | dict | None,
     tags = [_RENAME.get(t, t) for t in _source_tags(source, raw or {})]
     text = f"{title or ''} {description or ''}".lower()
     tags += [tag for pat, tag in _KEYWORD_TAGS if re.search(pat, text)]
+    tags = [t for t in tags if t in ALLOWED_TAGS]
     return list(dict.fromkeys(tags))[:MAX_TAGS]
 
 

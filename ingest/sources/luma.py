@@ -21,6 +21,26 @@ EVENT_API = "https://api.lu.ma/event/get"
 SF_PLACE_API_ID = "discplace-BDj7GNbGlsF7Cka"  # scraped from lu.ma/sf __NEXT_DATA__
 PACING_SECONDS = 0.3
 
+# Pagination notes (verified against the live API 2026-07-07):
+#   - `pagination_cursor` DOES advance correctly and results are sorted
+#     nearest-first (ascending start_at); confirmed by walking ~35 pages and
+#     watching start_at climb from today through 2027 without repeats.
+#   - There is no date-range/from/after filter param the API honors (tried
+#     `after`, `date_range`, `start_after`, `period` — all silently ignored).
+#     `sort_direction=desc` IS honored (flips to furthest-first) but that's
+#     not useful for "next N days" coverage, so default ascending is kept.
+#   - `pagination_limit` is capped server-side at ~48 regardless of the value
+#     requested (25/50/100/200/500 all returned <=48 entries per page), so
+#     requesting more than that per page just wastes a query param.
+#   - The previous bug wasn't broken cursor advancement — it was simply that
+#     ingest.run's default/typical --limit (~25-30) stopped pagination after
+#     one page, which is always "today and tomorrow" because the feed is
+#     nearest-first. Empirically, covering ~10 days of SF events out of this
+#     feed takes on the order of 400-450 discover entries (page ~16-18 at the
+#     ~48/page cap), so callers wanting 10-day coverage must pass a much
+#     larger --limit; there's no cheaper way to skip ahead.
+DISCOVER_PAGE_SIZE = 48
+
 
 def _prosemirror_to_text(doc) -> str | None:
     chunks: list[str] = []
@@ -118,7 +138,7 @@ def fetch(limit: int = 50) -> list[dict]:
     cursor = None
     while len(entries) < limit:
         params = {"place_api_id": SF_PLACE_API_ID,
-                  "pagination_limit": min(limit - len(entries), 25)}
+                  "pagination_limit": min(limit - len(entries), DISCOVER_PAGE_SIZE)}
         if cursor:
             params["pagination_cursor"] = cursor
         resp = requests.get(DISCOVER_API, params=params, headers=HEADERS, timeout=15)
@@ -129,7 +149,7 @@ def fetch(limit: int = 50) -> list[dict]:
             break
         entries.extend(batch)
         cursor = data.get("next_cursor")
-        if not cursor:
+        if not cursor or not data.get("has_more", bool(cursor)):
             break
 
     events = []

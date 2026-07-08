@@ -15,7 +15,7 @@ from starlette.requests import Request
 
 from db import get_conn, init_db
 from ingest.geocode import _CACHE_DDL, _lookup
-from scoring.weights import (LENSES, MAX_PICKS, PRESETS, WEIGHTS, TIER_CONFIDENT,
+from scoring.weights import (LENSES, MAX_PICKS, WEIGHTS, TIER_CONFIDENT,
                              TIER_MAYBE, composite, lens_weights, tier)
 
 app = FastAPI(title="sloshbot")
@@ -36,21 +36,26 @@ def included_tags(settings: dict) -> list[str]:
     return [t for t in raw.split(",") if t]
 
 
-def all_tags() -> list[str]:
+def tag_counts() -> list[dict]:
+    """Tags on upcoming events with frequency, most common first — feeds the
+    sidebar chip cloud (counts match what the filter actually affects)."""
+    now = datetime.now().isoformat()
     with get_conn() as conn:
-        return [r["tag"] for r in conn.execute("SELECT DISTINCT tag FROM event_tags ORDER BY tag")]
+        return [dict(r) for r in conn.execute(
+            """SELECT t.tag, count(*) AS n FROM event_tags t
+               JOIN events e ON e.id = t.event_id
+               WHERE e.starts_at >= ? GROUP BY t.tag
+               ORDER BY n DESC, t.tag""", (now,))]
 
 
-def active_weights(settings: dict) -> tuple[str, dict]:
-    """Current (preset_name, weights) — a preset from settings, custom sliders,
-    or the code default."""
-    preset = settings.get("preset", "balanced")
-    if preset == "custom":
-        try:
-            return "custom", {k: float(settings[f"weight_{k}"]) for k in WEIGHTS}
-        except (KeyError, ValueError):
-            return "balanced", WEIGHTS
-    return preset, PRESETS.get(preset, WEIGHTS)
+def active_weights(settings: dict) -> dict:
+    """Current scorer weights: one balance knob (weight_booze, 0–1) from
+    settings; logistics gets the remainder. Falls back to the code default."""
+    try:
+        b = min(1.0, max(0.0, float(settings["weight_booze"])))
+    except (KeyError, ValueError):
+        b = WEIGHTS["booze"]
+    return {"booze": round(b, 2), "logistics": round(1.0 - b, 2)}
 
 
 def home_coords(settings: dict) -> tuple[float, float] | None:
@@ -120,7 +125,7 @@ def load_events(start: datetime, end: datetime,
 
     settings = get_settings()
     home = home_coords(settings)
-    _, weights = active_weights(settings)
+    weights = active_weights(settings)
     inc_tags = set(included_tags(settings))
     events = []
     for r in rows:
@@ -270,7 +275,7 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
     events = load_events(now - timedelta(hours=1), now + timedelta(days=7), max_mi)
 
     settings = get_settings()
-    _, base = active_weights(settings)
+    base = active_weights(settings)
     rank_w = lens_weights(lens, base)
     for e in events:
         e["match"] = composite(e["scores"], rank_w)
@@ -302,6 +307,8 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
         "max_mi": max_mi,
         "has_home": home_coords(settings) is not None,
         "included_tags": included_tags(settings),
+        "tag_counts": tag_counts(),
+        "weights": base,
     })
 
 
@@ -310,15 +317,14 @@ def week(request: Request, max_mi: float | None = None):
     now = datetime.now()
     events = load_events(now - timedelta(hours=3), now + timedelta(days=7), max_mi)
     settings = get_settings()
-    preset, weights = active_weights(settings)
     return templates.TemplateResponse(request, "week.html", {
         "days": group_by_day(events),
         "view": "week",
         "max_mi": max_mi,
         "has_home": home_coords(settings) is not None,
-        "preset": preset, "weights": weights, "presets": list(PRESETS),
+        "weights": active_weights(settings),
         "n_confident": sum(1 for e in events if e["tier"] == "confident"),
-        "all_tags": all_tags(), "included_tags": included_tags(settings),
+        "tag_counts": tag_counts(), "included_tags": included_tags(settings),
     })
 
 
@@ -352,29 +358,12 @@ def map_view(request: Request, max_mi: float | None = None):
 
 
 @app.post("/settings/tune")
-def set_tuning(preset: str = Form(...),
-               weight_booze: float | None = Form(None),
-               weight_logistics: float | None = Form(None),
-               back: str = Form("/")):
-    pairs = [("preset", preset)]
-    if preset == "custom":
-        pairs += [("weight_booze", str(weight_booze or 0)),
-                  ("weight_logistics", str(weight_logistics or 0))]
+def set_tuning(weight_booze: float = Form(...), back: str = Form("/")):
+    """The one ranking knob: booze↔logistics balance (logistics = 1 − booze)."""
+    b = min(1.0, max(0.0, weight_booze))
     with get_conn() as conn:
-        conn.executemany("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", pairs)
-    return RedirectResponse(back, status_code=303)
-
-
-@app.post("/settings/tags")
-async def set_tags(request: Request):
-    """Tag filter: which event tags you're interested in right now. Stored in
-    `settings`, not code, so it can change as often as your taste does."""
-    form = await request.form()
-    selected = form.getlist("tags")
-    back = form.get("back") or "/week"
-    with get_conn() as conn:
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('included_tags', ?)",
-                     (",".join(selected),))
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('weight_booze', ?)",
+                     (str(b),))
     return RedirectResponse(back, status_code=303)
 
 

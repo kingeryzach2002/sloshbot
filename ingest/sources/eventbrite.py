@@ -22,8 +22,24 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# Eventbrite serves two browse-page templates that both embed
+# window.__SERVER_DATA__ but shape the listing data differently (see
+# _collect_listing_events): the classic "buckets" template on the plain
+# /events/ path, and a newer search-results template
+# (search_data.events.results) used by date-filtered paths like
+# events--this-weekend/, events--next-week/, and free--events/. The plain
+# /events/ page alone skews heavily toward the next ~48 hours with a thin,
+# scattered tail; the date-filtered paths are what actually pull in solid
+# coverage of the rest of the next-10-day window. ?page=2 on the
+# search-results template pages in real chronological additions (verified by
+# checking parsed event dates), so we take one extra page there for depth.
+# ?page=2 on the buckets template mostly reshuffles the same ~40 events
+# (34/39 overlap when checked), so it isn't worth the extra request.
 SEARCH_URLS = [
     "https://www.eventbrite.com/d/ca--san-francisco/events/",
+    "https://www.eventbrite.com/d/ca--san-francisco/events--this-weekend/",
+    "https://www.eventbrite.com/d/ca--san-francisco/events--next-week/",
+    "https://www.eventbrite.com/d/ca--san-francisco/events--next-week/?page=2",
     "https://www.eventbrite.com/d/ca--san-francisco/free--events/",
 ]
 
@@ -47,13 +63,38 @@ def _get_search_server_data(html: str, url: str) -> dict:
     return json.loads(m.group(1))
 
 
-def _collect_listing_events(server_data: dict) -> list[dict]:
-    seen: dict = {}
+def _events_from_buckets(server_data: dict) -> list[dict]:
+    """Classic browse-page template: server_data['buckets'][*]['events']."""
+    events: list[dict] = []
     for bucket in server_data.get("buckets", []):
-        for ev in bucket.get("events", []):
-            eid = ev.get("id")
-            if eid and eid not in seen:
-                seen[eid] = ev
+        events.extend(bucket.get("events", []))
+    return events
+
+
+def _events_from_search_data(server_data: dict) -> list[dict]:
+    """Newer template used by date-filtered browse paths (this-weekend,
+    next-week, free--events): server_data['search_data']['events']['results'].
+    Event dicts here use ints for 'id' where the buckets template uses
+    strings; _collect_listing_events normalizes that so cross-page dedup and
+    id-based lookups both work regardless of which template a page used.
+    """
+    search_data = server_data.get("search_data") or {}
+    events_block = search_data.get("events") or {}
+    return events_block.get("results", []) or []
+
+
+def _collect_listing_events(server_data: dict) -> list[dict]:
+    raw_events = _events_from_buckets(server_data) or _events_from_search_data(server_data)
+    seen: dict = {}
+    for ev in raw_events:
+        eid = ev.get("id") or ev.get("eid")
+        if eid is None:
+            continue
+        eid = str(eid)
+        if eid not in seen:
+            ev = dict(ev)
+            ev["id"] = eid
+            seen[eid] = ev
     return list(seen.values())
 
 

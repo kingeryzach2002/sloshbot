@@ -1,0 +1,105 @@
+keep,tag,n_events,example_events
+KEEP,music,26,BOLLYWOOD TAKEOVER at BUDDA SF ft. BASSPATCH | People in Plazas: Emily Day Swingtet (SF) | People in Plazas: The Odyssey Jazz Trio (SF)
+KEEP,party,17,BOLLYWOOD TAKEOVER at BUDDA SF ft. BASSPATCH | Chaat Maxxing: Launch Night by PromptQL | Yala Papa San Francisco: The Gay Latin x Middle Eastern Party
+KEEP,festival,14,People in Plazas: Emily Day Swingtet (SF) | People in Plazas: The Odyssey Jazz Trio (SF) | People in Plazas: Jason Brock/Dee Spencer Band (SF)
+KEEP,art,12,Festival HQ: Invitation to Explore | Tech Futures: A Creative Showcase Imagining How We Shape Science & Technology for Collective Benefit | Dateline 2046
+KEEP,tech,11,AI Supply Chain Hackathon 2026: Food Banks + AI | Tech Futures: A Creative Showcase Imagining How We Shape Science & Technology for Collective Benefit | Open Campus: Tuesday 🥪
+KEEP,comedy,10,Our Magic | &#8220;Mortified Live&#8221; Embarrassing Teen Diary Storytelling (Berkeley) | &#8220;Mortified Live&#8221; Embarrassing Teen Diary Storytelling (SF)
+,fitness,10,South First Fridays Art Walk (San Jose) | South First Fridays Art Walk (San Jose) | SF&#8217;s Free &#8220;Sundays at the Beach&#8221; Chair Yoga Day (Great Highway)
+KEEP,networking,10,San Francisco Hiring Event | Speakpreneur San Francisco (2 Day Workshop) | Agent-Led Growth / Agent Experience Demo Night @ Auth0 (#5th Edition)
+KEEP,workshop,10,Speakpreneur San Francisco (2 Day Workshop) | Tech Futures: A Creative Showcase Imagining How We Shape Science & Technology for Collective Benefit | Succulent Garden Workshop
+KEEP,ai,6,"Chaat Maxxing: Launch Night by PromptQL | Agent-Led Growth / Agent Experience Demo Night @ Auth0 (#5th Edition) | AI Pitch Night, hosted by TheAgentic @Snowflake's SVAI Hub"
+KEEP,talk,6,"Lectures on Tap- Psychedelics for Science: Mind, Brain, and Consciousness | CityTalk: Citywide Career Pathways to Employment, presented by DCAS | Beyond PAS: Anatomy-Guided Surgery for Complex Caesarean Delivery"
+KEEP,food,5,"Festival HQ: Invitation to Explore | Walk with Spirits, A Haunted Pub Crawl | Sushi Making Class: Tuesday & Saturday Dinner, San Francisco"
+KEEP,business,3,San Francisco Hiring Event | Speakpreneur San Francisco (2 Day Workshop) | The Grand Reveal
+,happy hour,3,Dateline 2046 | SF Security Padel Club - Week 4 | AI Founders Happy Hour
+,alternative,2,DON OMAR VS DADDY YANKEE EXPERIENCE @ EVE 10PM | Mixologi's Annual Summer Day Party - July 25th
+,bayarea,2,Soccer Viewing | Fridays on Front Street | Free San Francisco Block Party
+,beer,2,Queer Bowling MBC | SF Beer Week Kickoff
+KEEP,climate,2,Next-Gen Mobility and Energy Hardware Demo Night by Hello Space | Climate Tech Networking Night
+,community & culture,2,"Lectures on Tap- Psychedelics for Science: Mind, Brain, and Consciousness | Fridays on Front Street | Free San Francisco Block Party"
+,event,2,"Lectures on Tap- Psychedelics for Science: Mind, Brain, and Consciousness | Lady Wray at YBG Festival"
+,festival or fair,2,Potrero Hill STEAM Festival 2026 | Pickwick Vintage Show in San Francisco | July 2026
+,garden,2,Succulent Garden Workshop | Garden Volunteer Shifts
+,gay,2,Yala Papa San Francisco: The Gay Latin x Middle Eastern Party | PRIME - The San Francisco MEAT 2026
+,hobbies & special interest,2,Succulent Garden Workshop | The Saturday Roller Disco - 3rd Session  - Adults - 7 P.M. to 11 P.M.
+KEEP,panel,2,Tech Futures: A Creative Showcase Imagining How We Shape Science & Technology for Collective Benefit | LP & GP Dinner with aiRaiz & Founders Bay @ Western Alliance
+,wellness,2,Beyond PAS: Anatomy-Guided Surgery for Complex Caesarean Delivery | Zen and Modern Life
+,baking,1,Sour Flour Starter Workshop
+,bars,1,"Walk with Spirits, A Haunted Pub Crawl"
+,bollywood,1,BOLLYWOOD TAKEOVER at BUDDA SF ft. BASSPATCH
+,bowling,1,Queer Bowling MBC
+,career,1,San Francisco Hiring Event
+,careerfair,1,San Francisco Hiring Event
+,city/town,1,Fridays on Front Street | Free San Francisco Block Party
+,community,1,Neighborhood Cleanup + Coffee
+,concert,1,Lady Wray at YBG Festival
+,conference,1,Speakpreneur San Francisco (2 Day Workshop)
+KEEP,cooking,1,"Sushi Making Class: Tuesday & Saturday Dinner, San Francisco"
+,county/municipal government ,1,"CityTalk: Citywide Career Pathways to Employment, presented by DCAS"
+,data_analysis,1,AI Supply Chain Hackathon 2026: Food Banks + AI
+,dayparty,1,Mixologi's Annual Summer Day Party - July 25th
+,dembow,1,DON OMAR VS DADDY YANKEE EXPERIENCE @ EVE 10PM
+,demo day,1,Startup Demo Day + Reception
+,diy,1,Succulent Garden Workshop
+,dj,1,BOLLYWOOD TAKEOVER at BUDDA SF ft. BASSPATCH
+,employment,1,"CityTalk: Citywide Career Pathways to Employment, presented by DCAS"
+,environment,1,Garden Volunteer Shifts
+,event2024,1,The Grand Reveal
+,exclusive_drop,1,The Grand Reveal
+,extreme_weather,1,AI Supply Chain Hackathon 2026: Food Banks + AI
+,fashion,1,Pickwick Vintage Show in San Francisco | July 2026
+,fashion & beauty,1,Pickwick Vintage Show in San Francisco | July 2026
+,film,1,Chaat Maxxing: Launch Night by PromptQL
+,foodie,1,Sour Flour Starter Workshop
+,free,1,Lady Wray at YBG Festival
+,game or competition,1,AI Supply Chain Hackathon 2026: Food Banks + AI
+,gardening,1,Garden Volunteer Shifts
+,government & politics,1,"CityTalk: Citywide Career Pathways to Employment, presented by DCAS"
+,grand_reveal,1,The Grand Reveal
+,haunted,1,"Walk with Spirits, A Haunted Pub Crawl"
+,high tech,1,AI Supply Chain Hackathon 2026: Food Banks + AI
+,home & garden,1,Garden Volunteer Shifts
+,home & lifestyle,1,Garden Volunteer Shifts
+,kitchen,1,"Sushi Making Class: Tuesday & Saturday Dinner, San Francisco"
+,latin,1,Yala Papa San Francisco: The Gay Latin x Middle Eastern Party
+,launch party,1,Fintech Product Launch Party
+,leather,1,PRIME - The San Francisco MEAT 2026
+,lecture,1,"Lectures on Tap- Psychedelics for Science: Mind, Brain, and Consciousness"
+,lgbtq,1,Yala Papa San Francisco: The Gay Latin x Middle Eastern Party
+,magic,1,Our Magic
+,medical,1,Beyond PAS: Anatomy-Guided Surgery for Complex Caesarean Delivery
+,meeting or networking event,1,San Francisco Hiring Event
+,meetup,1,Design Systems Meetup
+,nightlife,1,BOLLYWOOD TAKEOVER at BUDDA SF ft. BASSPATCH
+,obstetrics,1,Beyond PAS: Anatomy-Guided Surgery for Complex Caesarean Delivery
+,opening,1,Gallery Opening: New Coastal Works
+,outdoors,1,Free Yoga in Dolores Park
+,performing & visual arts,1,Our Magic
+,pregnancy,1,Beyond PAS: Anatomy-Guided Surgery for Complex Caesarean Delivery
+,prime,1,PRIME - The San Francisco MEAT 2026
+,queer,1,Queer Bowling MBC
+,r&b,1,Lady Wray at YBG Festival
+,reception,1,Startup Demo Day + Reception
+,recruitment,1,"CityTalk: Citywide Career Pathways to Employment, presented by DCAS"
+,reggaeton,1,DON OMAR VS DADDY YANKEE EXPERIENCE @ EVE 10PM
+,rollerdisco,1,The Saturday Roller Disco - 3rd Session  - Adults - 7 P.M. to 11 P.M.
+,rollerskating,1,The Saturday Roller Disco - 3rd Session  - Adults - 7 P.M. to 11 P.M.
+,sales & marketing,1,Speakpreneur San Francisco (2 Day Workshop)
+,sanfrancisco,1,PRIME - The San Francisco MEAT 2026
+,sanfrancisconightlife,1,Fridays on Front Street | Free San Francisco Block Party
+,sanjose,1,"Sushi Making Class: Tuesday & Saturday Dinner, San Francisco"
+,sf,1,"Lectures on Tap- Psychedelics for Science: Mind, Brain, and Consciousness"
+,skate,1,The Saturday Roller Disco - 3rd Session  - Adults - 7 P.M. to 11 P.M.
+,smallbusiness,1,Pickwick Vintage Show in San Francisco | July 2026
+,soccer,1,Soccer Viewing
+,sourdough,1,Sour Flour Starter Workshop
+,speakeasy,1,Our Magic
+,spirits,1,"Walk with Spirits, A Haunted Pub Crawl"
+,sports,1,Soccer Viewing
+,sports & fitness,1,Soccer Viewing
+,surprise_moment,1,The Grand Reveal
+,tour,1,"Walk with Spirits, A Haunted Pub Crawl"
+,vintage,1,Pickwick Vintage Show in San Francisco | July 2026
+,volunteer,1,Neighborhood Cleanup + Coffee
+,world,1,DON OMAR VS DADDY YANKEE EXPERIENCE @ EVE 10PM

@@ -9,16 +9,11 @@ WEIGHTS = {
     "logistics": 0.30,
 }
 
-# Named weight profiles selectable in the UI. "custom" = whatever the sliders say.
-# Event-type preference used to be a third scorer ("category"/"fit") driven by a
-# hardcoded keyword list; that's gone in favor of the tag filter (settings row
-# "included_tags", edited from the week view) which hides non-matching events
-# outright instead of nudging a score.
-PRESETS = {
-    "balanced": WEIGHTS,
-    "🍸 booze hunt": {"booze": 0.85, "logistics": 0.15},
-    "🛋 lazy nearby": {"booze": 0.40, "logistics": 0.60},
-}
+# With two scorers there is exactly one honest knob: the booze↔logistics
+# balance slider in the sidebar (settings key "weight_booze"; logistics gets
+# the remainder). Named presets are gone — they were personality, not signal.
+# Event-type preference isn't a weight at all: it's the tag filter (settings
+# key "included_tags"), a hard filter applied in load_events.
 
 # Perk lenses: the user-facing "what are we hunting" scorers. A future perk
 # scorer (food, live music, ...) becomes a lens by adding its scorer key here.

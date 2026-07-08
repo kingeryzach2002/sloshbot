@@ -1,0 +1,72 @@
+{# Sticky filter/ranking sidebar — the single home for all filters.
+   Expects: back, weights, has_home, max_mi, tag_counts, included_tags.
+   Uses toggleTag()/clearFilters() defined by the including page. #}
+<style>
+  .layout { display: flex; gap: 36px; align-items: flex-start; }
+  .side { width: 220px; flex: none; position: sticky; top: 24px; }
+  .main { flex: 1; min-width: 0; max-width: 680px; }
+  .side h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+             color: var(--muted); margin: 26px 0 10px; font-weight: 600; }
+  .side h4:first-of-type { margin-top: 0; }
+  .side h4 .clearlink { float: right; color: var(--muted); font-weight: 400;
+                        text-transform: none; letter-spacing: 0; font-size: 11.5px;
+                        text-decoration: underline; cursor: pointer; }
+  .side h4 .clearlink:hover { color: var(--red); }
+  .balance input[type=range] { width: 100%; accent-color: var(--gold); margin: 2px 0 4px; }
+  .balance .ends { display: flex; justify-content: space-between; font-size: 11.5px;
+                   color: var(--muted); }
+  .schip { display: inline-block; font-size: 12px; padding: 2px 10px; border-radius: 99px;
+           border: 1px solid var(--line); background: var(--card2); color: var(--muted);
+           cursor: pointer; text-decoration: none; margin: 0 4px 6px 0; line-height: 1.6; }
+  .schip:hover { border-color: var(--gold-dim); color: var(--text); }
+  .schip.on { border-color: var(--gold); color: var(--gold); }
+  .schip i { font-style: normal; opacity: 0.55; margin-left: 4px; font-size: 10.5px; }
+  details.moretags summary { cursor: pointer; color: var(--muted); font-size: 11.5px;
+                             margin: 4px 0 8px; text-decoration: underline; }
+  @media (max-width: 920px) {
+    .layout { flex-direction: column; gap: 8px; }
+    .side { position: static; width: 100%; }
+    .main { max-width: none; }
+  }
+</style>
+<aside class="side">
+  <h4>ranking</h4>
+  <form class="balance" method="post" action="/settings/tune">
+    <input type="hidden" name="back" value="{{ back }}">
+    <input type="range" name="weight_booze" min="0" max="1" step="0.05"
+           value="{{ weights.booze }}" onchange="this.form.submit()"
+           title="how much free drinks matter vs. time & place">
+    <div class="ends"><span>&#127864; booze {{ (weights.booze * 100) | round | int }}%</span>
+      <span>logistics {{ (weights.logistics * 100) | round | int }}%</span></div>
+  </form>
+
+  {% if has_home %}
+  <h4>distance</h4>
+  <div>
+    <a class="schip {{ 'on' if not max_mi }}" href="{{ back }}">any</a>
+    {% for mi in [1, 2, 3, 5] %}
+      <a class="schip {{ 'on' if max_mi == mi }}" href="{{ back }}?max_mi={{ mi }}">&le; {{ mi }} mi</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if tag_counts %}
+  <h4>tags{% if included_tags %}<a class="clearlink" onclick="clearFilters('{{ back }}')">clear ({{ included_tags | length }})</a>{% endif %}</h4>
+  <div>
+    {% for t in tag_counts %}{% if loop.index <= 18 or t.tag in included_tags %}
+      <span class="schip {{ 'on' if t.tag in included_tags }}"
+            onclick="toggleTag('{{ t.tag }}')">{{ t.tag }}<i>{{ t.n }}</i></span>
+    {% endif %}{% endfor %}
+  </div>
+  {% if tag_counts | length > 18 %}
+  <details class="moretags">
+    <summary>all {{ tag_counts | length }} tags</summary>
+    <div>
+      {% for t in tag_counts %}{% if loop.index > 18 and t.tag not in included_tags %}
+        <span class="schip" onclick="toggleTag('{{ t.tag }}')">{{ t.tag }}<i>{{ t.n }}</i></span>
+      {% endif %}{% endfor %}
+    </div>
+  </details>
+  {% endif %}
+  {% endif %}
+</aside>

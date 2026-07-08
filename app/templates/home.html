@@ -13,16 +13,13 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; }
-  .wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 80px; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 20px 80px; }
   header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.02em; }
   h1 .tip { color: var(--gold); }
   nav a { color: var(--muted); text-decoration: none; margin-right: 12px;
           padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); }
   nav a.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: 600; }
-  .distsel { margin-left: auto; background: var(--card2); border: 1px solid var(--line);
-             color: var(--text); border-radius: 8px; padding: 4px 8px; font-size: 13px; }
-
   .lensbar { display: flex; align-items: center; gap: 8px; margin: 16px 0 20px;
              font-size: 13px; color: var(--muted); }
   .lensbar a { color: var(--muted); text-decoration: none; padding: 2px 10px;
@@ -56,14 +53,6 @@
          cursor: pointer; }
   .tag:hover { border-color: var(--gold-dim); color: var(--text); }
   .tag.on { border-color: var(--gold); color: var(--gold); }
-  .filterbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-               margin: -8px 0 18px; font-size: 13px; }
-  .filterbar .fl { color: var(--muted); }
-  .fchip { color: var(--text); text-decoration: none; border: 1px solid var(--gold-dim);
-           background: var(--card2); border-radius: 99px; padding: 2px 10px; }
-  .fchip b { color: var(--muted); font-weight: 600; margin-left: 3px; }
-  .fchip:hover b { color: var(--red); }
-  .fclear { color: var(--muted); font-size: 12px; text-decoration: underline; cursor: pointer; }
   .btn { font-size: 13px; padding: 7px 14px; border-radius: 9px; cursor: pointer;
          border: 1px solid var(--line); background: var(--card2); color: var(--text);
          text-decoration: none; }
@@ -113,24 +102,20 @@
       <a href="/calendar">Calendar</a>
       <a href="/map">Map</a>
     </nav>
-    {% if has_home %}
-    <select class="distsel" onchange="location.href='/?lens={{ lens }}' + (this.value ? '&max_mi=' + this.value : '')">
-      <option value="">any distance</option>
-      {% for mi in [1, 2, 3, 5] %}
-        <option value="{{ mi }}" {{ 'selected' if max_mi == mi else '' }}>within {{ mi }} mi</option>
-      {% endfor %}
-    </select>
-    {% endif %}
   </header>
 
+  {% set back = '/' %}
+  <div class="layout">
+  {% include "_sidebar.html" %}
+  <div class="main">
+  {% if lenses | length > 1 %}
   <div class="lensbar">
     ranking by:
     {% for l in lenses %}
       <a href="/?lens={{ l }}" class="{{ 'active' if l == lens else '' }}">{{ l }}</a>
     {% endfor %}
   </div>
-  {% set back = '/' %}
-  {% include "_filterbar.html" %}
+  {% endif %}
 
   {% if debrief %}
   <div class="debrief" id="debrief">
@@ -205,6 +190,8 @@
   </details>
   {% endif %}
   {% endif %}
+  </div><!-- /main -->
+  </div><!-- /layout -->
 </div>
 <script>
   const FB_PAIRS = { went: "skipped", skipped: "went",

@@ -13,7 +13,7 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 80px; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 20px 80px; }
   header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.02em; }
   h1 .tip { color: var(--gold); }
@@ -21,27 +21,6 @@
           padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); }
   nav a.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: 600; }
   .sub { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
-  .chips { display: flex; gap: 8px; align-items: center; margin: 4px 0 6px; flex-wrap: wrap; }
-  .chip { background: var(--card2); border: 1px solid var(--line); color: var(--text);
-          border-radius: 99px; padding: 4px 12px; font-size: 13px; cursor: pointer;
-          list-style: none; display: inline-block; }
-  details.tunepop { position: relative; }
-  details.tunepop summary::-webkit-details-marker { display: none; }
-  details.tunepop[open] summary.chip { border-color: var(--gold); }
-  .pop { position: absolute; z-index: 30; top: 36px; left: 0; background: var(--card);
-         border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
-         display: flex; flex-direction: column; gap: 10px; width: 240px;
-         box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
-  .pop label { font-size: 12.5px; color: var(--muted); display: flex;
-               flex-direction: column; gap: 3px; }
-  .pop label span { color: var(--gold); float: right; }
-  .pop input[type=range] { accent-color: var(--gold); width: 100%; }
-  .pop.tagpop { width: 220px; max-height: 280px; overflow-y: auto; }
-  .tagcheck { flex-direction: row !important; align-items: center; gap: 6px !important;
-              font-size: 13px; color: var(--text); }
-  .tagcheck input { accent-color: var(--gold); }
-  .pop button { background: var(--gold); border: none; color: var(--bg); font-weight: 650;
-                border-radius: 8px; padding: 6px; cursor: pointer; }
   h2.day { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em;
            color: var(--muted); border-bottom: 1px solid var(--line);
            padding-bottom: 6px; margin: 28px 0 12px; }
@@ -67,14 +46,6 @@
          cursor: pointer; }
   .tag:hover { border-color: var(--gold-dim); color: var(--text); }
   .tag.on { border-color: var(--gold); color: var(--gold); }
-  .filterbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-               margin: 2px 0 18px; font-size: 13px; }
-  .filterbar .fl { color: var(--muted); }
-  .fchip { color: var(--text); text-decoration: none; border: 1px solid var(--gold-dim);
-           background: var(--card2); border-radius: 99px; padding: 2px 10px; }
-  .fchip b { color: var(--muted); font-weight: 600; margin-left: 3px; }
-  .fchip:hover b { color: var(--red); }
-  .fclear { color: var(--muted); font-size: 12px; text-decoration: underline; cursor: pointer; }
   .why { margin: 8px 0 0; padding: 8px 10px; background: var(--card2);
          border-radius: 8px; font-size: 13px; color: var(--muted); }
   .why b { color: var(--text); font-weight: 600; }
@@ -112,53 +83,9 @@
   </header>
 
   {% set back = '/week' %}
-  <div class="chips">
-    <form method="post" action="/settings/tune">
-      <input type="hidden" name="back" value="{{ back }}">
-      <select class="chip" name="preset" onchange="this.form.submit()">
-        {% for p in presets %}<option value="{{ p }}" {{ 'selected' if preset == p }}>{{ p }}</option>{% endfor %}
-        {% if preset == 'custom' %}<option value="custom" selected>⚙ custom</option>{% endif %}
-      </select>
-    </form>
-    {% if has_home %}
-    <select class="chip" onchange="location.href='{{ back }}' + (this.value ? '?max_mi=' + this.value : '')">
-      <option value="">any distance</option>
-      {% for mi in [1, 2, 3, 5] %}
-        <option value="{{ mi }}" {{ 'selected' if max_mi == mi else '' }}>within {{ mi }} mi</option>
-      {% endfor %}
-    </select>
-    {% endif %}
-    <details class="tunepop">
-      <summary class="chip">tune ⚙</summary>
-      <form class="pop" method="post" action="/settings/tune">
-        <input type="hidden" name="preset" value="custom">
-        <input type="hidden" name="back" value="{{ back }}">
-        <label>🍸 booze <span>{{ weights.booze }}</span>
-          <input type="range" name="weight_booze" min="0" max="1" step="0.05" value="{{ weights.booze }}"
-                 oninput="this.previousElementSibling.textContent = this.value"></label>
-        <label>logistics <span>{{ weights.logistics }}</span>
-          <input type="range" name="weight_logistics" min="0" max="1" step="0.05" value="{{ weights.logistics }}"
-                 oninput="this.previousElementSibling.textContent = this.value"></label>
-        <button type="submit">apply</button>
-      </form>
-    </details>
-    {% if all_tags %}
-    <details class="tunepop">
-      <summary class="chip">tags{{ ' (' ~ included_tags|length ~ ')' if included_tags else '' }}</summary>
-      <form class="pop tagpop" method="post" action="/settings/tags">
-        <input type="hidden" name="back" value="{{ back }}">
-        {% for t in all_tags %}
-          <label class="tagcheck">
-            <input type="checkbox" name="tags" value="{{ t }}" {{ 'checked' if t in included_tags else '' }}>
-            {{ t }}
-          </label>
-        {% endfor %}
-        <button type="submit">apply</button>
-      </form>
-    </details>
-    {% endif %}
-  </div>
-  {% include "_filterbar.html" %}
+  <div class="layout">
+  {% include "_sidebar.html" %}
+  <div class="main">
   <p class="sub">{{ n_confident }} confident pick{{ '' if n_confident == 1 else 's' }}
     {{ 'in the next 7 days' if view == 'week' else 'tonight & tomorrow' }}</p>
 
@@ -185,9 +112,9 @@
       probability of free drinks, citing its evidence.<br>
       <b>logistics</b> — starts at 50, then time-of-day, neighborhood, and RSVP
       friction adjust it (e.g. +25 weeknight sweet spot, −30 waitlisted).<br><br>
-      Event-type preference isn't a score — it's the <b>tags</b> filter above.
-      Check the tags you're interested in and only matching events show up
-      (events with no tags at all are never hidden by it). No code to edit,
+      Event-type preference isn't a score — it's the <b>tags</b> filter in the
+      sidebar. Pick the tags you're interested in and only matching events show
+      up (events with no tags at all are never hidden by it). No code to edit,
       and it can change as often as your taste does.<br><br>
       The badge's <b>match</b> number blends them:
       {% for name, w in scoring_info.weights.items() %}{{ name }} ×{{ w }}{{ ", " if not loop.last }}{% endfor %}.
@@ -196,6 +123,8 @@
       Weights and thresholds live in <code>scoring/weights.py</code>.
     </div>
   </details>
+  </div><!-- /main -->
+  </div><!-- /layout -->
 </div>
 <script>
   async function toggleTag(tag) {
