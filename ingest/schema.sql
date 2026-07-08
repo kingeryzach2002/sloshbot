@@ -34,20 +34,33 @@ CREATE TABLE IF NOT EXISTS scores (
   PRIMARY KEY (event_id, scorer)
 );
 
+-- One row per signed-up person. The event catalog (events/scores/event_tags)
+-- is shared and crowdsourced across everyone — only preferences and personal
+-- state (settings/feedback/holds below) are scoped per-user.
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,
+  email         TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS feedback (
+  user_id    TEXT NOT NULL REFERENCES users(id),
   event_id   TEXT NOT NULL REFERENCES events(id),
   verdict    TEXT NOT NULL,             -- 'went'|'skipped'|'as_promised'|'not_as_promised'
   lens       TEXT NOT NULL DEFAULT '',  -- scorer a promise verdict applies to; '' for went/skipped
   note       TEXT,
   created_at TEXT NOT NULL,
-  PRIMARY KEY (event_id, verdict, lens)
+  PRIMARY KEY (user_id, event_id, verdict, lens)
 );
 
--- calendar holds the user actually placed; drives the morning-after debrief
+-- calendar holds a user actually placed; drives their morning-after debrief
 CREATE TABLE IF NOT EXISTS holds (
-  event_id   TEXT PRIMARY KEY REFERENCES events(id),
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  event_id   TEXT NOT NULL REFERENCES events(id),
   lens       TEXT NOT NULL DEFAULT '',  -- lens active when the hold was placed
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, event_id)
 );
 
 -- free-form labels ("hackathon", "panel", "happy hour"); arbitrary set per event
@@ -60,8 +73,11 @@ CREATE TABLE IF NOT EXISTS event_tags (
 CREATE INDEX IF NOT EXISTS idx_events_starts_at ON events(starts_at);
 CREATE INDEX IF NOT EXISTS idx_event_tags_tag ON event_tags(tag);
 
--- key/value app settings written by the UI (e.g. home_address, home_lat, home_lon)
+-- per-user key/value settings (e.g. home_address, home_lat, home_lon,
+-- included_tags, included_sources, price_filter)
 CREATE TABLE IF NOT EXISTS settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
+  user_id TEXT NOT NULL REFERENCES users(id),
+  key     TEXT NOT NULL,
+  value   TEXT NOT NULL,
+  PRIMARY KEY (user_id, key)
 );

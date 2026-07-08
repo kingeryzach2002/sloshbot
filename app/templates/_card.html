@@ -1,3 +1,4 @@
+{% import "_meter.html" as m %}
 <div class="card {{ e.tier }}">
   <div class="row1">
     <span class="title"><a href="{{ e.url }}" target="_blank">{{ e.title }}</a></span>
@@ -20,7 +21,7 @@
       onclick="toggleTag('{{ t }}')" title="filter to this tag">{{ t }}</span>{% endfor %}</div>
   {% endif %}
   {% if e.scores.booze is defined %}
-    <div class="whyline"><span class="meter" title="booze {{ (e.scores.booze * 100) | round | int }}%">&#127864;&nbsp;{% for i in range(5) %}<i class="{{ 'on' if e.scores.booze * 5 >= i + 0.5 }}"></i>{% endfor %}</span>
+    <div class="whyline">{{ m.meter('booze', e.scores.booze) }}
       &nbsp;{{ e.rationales.booze }}</div>
   {% endif %}
   {% if e.rationales %}
@@ -33,7 +34,7 @@
     </details>
   {% endif %}
   <div class="actions">
-    <button class="btn primary" onclick="hold(this, '{{ e.id }}', '{{ e.gcal }}', '{{ lens | default('booze') }}')">+ hold on calendar</button>
+    <button class="btn primary" onclick="hold(this, '{{ e.id }}', '{{ e.gcal }}', '{{ lens | default(default_lens) }}')">+ hold on calendar</button>
   </div>
   <div class="fbrow">
     <span class="fbq">did you go?</span>

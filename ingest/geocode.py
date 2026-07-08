@@ -16,9 +16,21 @@ NOMINATIM = "https://nominatim.openstreetmap.org/search"
 HEADERS = {"User-Agent": "sloshbot/0.1 (personal event aggregator)"}
 PACING_SECONDS = 1.1
 
-_CACHE_DDL = """CREATE TABLE IF NOT EXISTS geocode_cache (
+CACHE_DDL = """CREATE TABLE IF NOT EXISTS geocode_cache (
   query TEXT PRIMARY KEY, lat REAL, lon REAL
 )"""
+_CACHE_DDL = CACHE_DDL
+
+
+def geocode(conn, address: str) -> tuple[float, float] | tuple[None, None]:
+    """Public entry point for callers outside the pipeline (e.g. the app).
+
+    Ensures the cache table exists, then delegates to the existing lookup
+    logic. Behaves identically to the old inline `conn.execute(_CACHE_DDL)`
+    + `_lookup(conn, address)` pattern.
+    """
+    conn.execute(CACHE_DDL)
+    return _lookup(conn, address)
 
 
 def _lookup(conn, query: str) -> tuple[float, float] | tuple[None, None]:
@@ -67,14 +79,21 @@ def main():
             else:
                 failed += 1
 
-        # home address from settings (written by the UI) -> home_lat/home_lon
-        home = conn.execute("SELECT value FROM settings WHERE key='home_address'").fetchone()
-        if home:
-            lat, lon = _lookup(conn, home["value"])
+        # every user's home address (written by the UI) -> home_lat/home_lon.
+        # Normally set_home() geocodes inline at save time; this is the
+        # fallback for addresses that failed then or predate that.
+        homes = conn.execute(
+            "SELECT user_id, value FROM settings WHERE key = 'home_address'").fetchall()
+        for h in homes:
+            lat, lon = _lookup(conn, h["value"])
             if lat is not None:
-                conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('home_lat', ?)", (str(lat),))
-                conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('home_lon', ?)", (str(lon),))
-                print(f"home address geocoded: {lat:.5f}, {lon:.5f}")
+                conn.execute(
+                    "INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_lat', ?)",
+                    (h["user_id"], str(lat)))
+                conn.execute(
+                    "INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_lon', ?)",
+                    (h["user_id"], str(lon)))
+                print(f"home address geocoded for {h['user_id']}: {lat:.5f}, {lon:.5f}")
 
     print(f"geocoded {done}, unresolved {failed}")
 

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+{% if warming_up %}<meta http-equiv="refresh" content="12">{% endif %}
 <title>sloshbot — calendar</title>
 {% include "_theme.html" %}
 <style>
@@ -61,10 +62,17 @@
       <a href="/calendar" class="active">Calendar</a>
       <a href="/map">Map</a>
     </nav>
+    <form class="logout-form" method="post" action="/logout">
+      <button class="btn" type="submit">log out</button>
+    </form>
   </header>
 
   {% set back = '/calendar' %}
   {% include "_filterbar.html" %}
+
+  {% if no_events %}
+    {% include "_empty.html" %}
+  {% else %}
   <p class="cal-cap">Showing each day's top {{ cap }} by match — lower matches are hidden, not deleted.</p>
 
   <div class="cal">
@@ -101,6 +109,7 @@
       </div>
     {% endfor %}
   </div>
+  {% endif %}
 </div>
 </body>
 </html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sloshbot — log in</title>
+{% include "_theme.html" %}
+<style>
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+  .wrap { width: 100%; max-width: 380px; }
+  header { display: flex; justify-content: center; margin-bottom: 4px; }
+  .tagline { text-align: center; color: var(--muted); font-size: 13.5px; margin: 0 0 22px; }
+
+  .authcard { background: var(--card); border: 1px solid var(--gold-dim); border-radius: 16px;
+              padding: 26px 24px 24px; box-shadow: 0 0 48px -12px var(--gold-glow),
+              inset 0 1px 0 rgba(232, 179, 75, 0.08); }
+
+  .error { background: rgba(201, 111, 94, 0.12); border: 1px solid var(--red);
+           color: var(--red); border-radius: 9px; padding: 9px 12px;
+           font-size: 13.5px; margin-bottom: 16px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; color: var(--muted); font-size: 12px;
+                 text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .field input[type=email], .field input[type=password] {
+    width: 100%; background: var(--card2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 9px; padding: 9px 12px; font-size: 14px; font-family: inherit;
+    transition: border-color .15s;
+  }
+  .field input[type=email]:focus, .field input[type=password]:focus {
+    outline: none; border-color: var(--gold-dim);
+  }
+
+  .authcard .btn.primary { width: 100%; padding: 9px 13px; font-size: 14px; margin-top: 4px; }
+
+  .switch { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; }
+  .switch a { color: var(--gold); text-decoration: none; }
+  .switch a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="justify-content: center;">
+    <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
+  </header>
+  <p class="tagline">the free-booze finder</p>
+
+  <div class="authcard">
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required autofocus autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button class="btn primary" type="submit">Log in</button>
+    </form>
+    <div class="switch">New here? <a href="/signup">Sign up</a></div>
+  </div>
+</div>
+</body>
+</html>

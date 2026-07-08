@@ -139,8 +139,4 @@
     await fetch(`/settings/price/toggle?value=${encodeURIComponent(value)}`, { method: "POST" });
     location.reload();
   }
-  async function clearPriceFilter(back) {
-    await fetch("/settings/price/clear", { method: "POST" });
-    location.href = back;
-  }
 </script>

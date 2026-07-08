@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {% if warming_up %}<meta http-equiv="refresh" content="12">{% endif %}
 <title>sloshbot</title>
+{% import "_meter.html" as m %}
 {% include "_theme.html" %}
 <style>
   .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
@@ -64,6 +65,9 @@
       <a href="/calendar">Calendar</a>
       <a href="/map">Map</a>
     </nav>
+    <form class="logout-form" method="post" action="/logout">
+      <button class="btn" type="submit">log out</button>
+    </form>
   </header>
 
   {% set back = '/' %}
@@ -83,17 +87,8 @@
   {% endif %}
 
   {% if not hero %}
-    {% if warming_up %}
-      <div class="empty"><div class="coupe pouring"><i></i></div>
-        Pouring your first round — fetching events now.<br>
-        <small>This page refreshes itself in a moment.</small></div>
-    {% elif included_tags or included_sources or price_filter or max_mi or min_booze %}
-      <div class="empty"><div class="coupe"></div>Nothing matches your filters this week.<br>
-        <small>Loosen them above to see more.</small></div>
-    {% else %}
-      <div class="empty"><div class="coupe"></div>Nothing on the radar this week.<br>
-        <small>Check back soon — new events land a few times a day.</small></div>
-    {% endif %}
+    {% set empty_scope = ' this week' %}
+    {% include "_empty.html" %}
   {% else %}
   <div class="hero">
     <div class="label"><span class="pulse"></span>{{ hero_label }}</div>
@@ -110,7 +105,7 @@
       {% if hero.rsvp_type and hero.rsvp_type != 'open' %} · <span class="rsvp">{{ hero.rsvp_type }}</span>{% endif %}
     </div>
     {% if hero.rationales.get(lens) %}
-      <div class="why"><span class="meter" title="{{ lens }} {{ (hero.scores.get(lens, 0) * 100) | round | int }}%">&#127864;&nbsp;{% for i in range(5) %}<i class="{{ 'on' if hero.scores.get(lens, 0) * 5 >= i + 0.5 }}"></i>{% endfor %}</span>
+      <div class="why">{{ m.meter(lens, hero.scores.get(lens, 0)) }}
         — {{ hero.rationales.get(lens) }}</div>
     {% endif %}
     {% if hero.tags %}
@@ -156,24 +151,6 @@
   {% endif %}
   {% endif %}
 </div>
-<script>
-  const FB_PAIRS = { went: "skipped", skipped: "went",
-                     as_promised: "not_as_promised", not_as_promised: "as_promised" };
-  async function fb(btn, eventId, verdict, lens) {
-    const res = await fetch(`/feedback/${eventId}/${verdict}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
-    const { state } = await res.json();
-    btn.classList.toggle("done", state === "on");
-    if (state === "on") {
-      const other = btn.parentElement.querySelector(`[data-verdict="${FB_PAIRS[verdict]}"]`);
-      if (other) other.classList.remove("done");
-    }
-  }
-  async function hold(btn, eventId, gcal, lens) {
-    fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
-    window.open(gcal, "_blank");
-    btn.classList.add("done");
-    btn.textContent = "held \u2713";
-  }
-</script>
+{% include "_feedback.html" %}
 </body>
 </html>

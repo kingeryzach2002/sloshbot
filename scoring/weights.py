@@ -15,6 +15,13 @@ WEIGHTS = {
 # scorer (food, live music, ...) becomes a lens by adding its scorer key here.
 LENSES = ["booze"]
 
+# Per-lens display metadata — the single home for how a lens is rendered, so a
+# new lens is a config entry here (+ its scorer) rather than copy-pasted markup.
+# emoji_html is the HTML entity so templates can emit it verbatim with |safe.
+LENS_META = {
+    "booze": {"label": "booze", "emoji_html": "&#127864;"},  # 🍸
+}
+
 TIER_CONFIDENT = 0.65  # >= this -> "confident"
 TIER_MAYBE = 0.40      # >= this -> "maybe"; below -> hidden
 

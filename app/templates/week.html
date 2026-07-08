@@ -33,6 +33,9 @@
       <a href="/calendar">Calendar</a>
       <a href="/map">Map</a>
     </nav>
+    <form class="logout-form" method="post" action="/logout">
+      <button class="btn" type="submit">log out</button>
+    </form>
   </header>
 
   {% set back = '/week' %}
@@ -40,17 +43,7 @@
   <p class="sub">{{ n_confident }} confident pick{{ '' if n_confident == 1 else 's' }} in the next 7 days</p>
 
   {% if not days %}
-    {% if warming_up %}
-      <div class="empty"><div class="coupe pouring"><i></i></div>
-        Pouring your first round — fetching events now.<br>
-        <small>This page refreshes itself in a moment.</small></div>
-    {% elif included_tags or included_sources or price_filter or max_mi or min_booze %}
-      <div class="empty"><div class="coupe"></div>Nothing matches your filters.<br>
-        <small>Loosen them to see more.</small></div>
-    {% else %}
-      <div class="empty"><div class="coupe"></div>Nothing on the radar.<br>
-        <small>Check back soon — new events land a few times a day.</small></div>
-    {% endif %}
+    {% include "_empty.html" %}
   {% endif %}
 
   {% for day, events in days %}
@@ -79,30 +72,12 @@
       up (events with no tags at all are never hidden by it).<br><br>
       The gold ring on each card is the <b>match</b>: the booze score. A bright,
       glowing card is a <b>confident</b> pick (≥{{ (scoring_info.confident * 100) | int }},
-      capped at 3 per week); dimmed cards are <b>maybes</b>
+      capped at 3 per day); dimmed cards are <b>maybes</b>
       (≥{{ (scoring_info.maybe * 100) | int }}); anything below is hidden.
       Thresholds live in <code>scoring/weights.py</code>.
     </div>
   </details>
 </div>
-<script>
-  const FB_PAIRS = { went: "skipped", skipped: "went",
-                     as_promised: "not_as_promised", not_as_promised: "as_promised" };
-  async function fb(btn, eventId, verdict, lens) {
-    const res = await fetch(`/feedback/${eventId}/${verdict}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
-    const { state } = await res.json();
-    btn.classList.toggle("done", state === "on");
-    if (state === "on") {
-      const other = btn.parentElement.querySelector(`[data-verdict="${FB_PAIRS[verdict]}"]`);
-      if (other) other.classList.remove("done");
-    }
-  }
-  async function hold(btn, eventId, gcal, lens) {
-    fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
-    window.open(gcal, "_blank");
-    btn.classList.add("done");
-    btn.textContent = "held ✓";
-  }
-</script>
+{% include "_feedback.html" %}
 </body>
 </html>

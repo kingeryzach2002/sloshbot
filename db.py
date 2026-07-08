@@ -18,6 +18,12 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
+# Stable id for data written before multi-user accounts existed. Preserved,
+# never deleted — reassign_legacy_user() moves it onto a real account once
+# the site owner signs up for real.
+LEGACY_USER_ID = "legacy"
+
+
 def init_db() -> None:
     with get_conn() as conn:
         conn.executescript(SCHEMA_PATH.read_text())
@@ -53,3 +59,81 @@ def init_db() -> None:
                 FROM feedback_old;
                 DROP TABLE feedback_old;
             """)
+        _migrate_to_multi_user(conn)
+
+
+def _migrate_to_multi_user(conn: sqlite3.Connection) -> None:
+    """Pre-accounts DBs had global (unscoped) settings/feedback/holds. Scope
+    them to LEGACY_USER_ID so existing personal data survives the upgrade —
+    reassign_legacy_user() moves it onto a real account after signup."""
+    settings_cols = {r["name"] for r in conn.execute("PRAGMA table_info(settings)")}
+    feedback_cols = {r["name"] for r in conn.execute("PRAGMA table_info(feedback)")}
+    holds_cols = {r["name"] for r in conn.execute("PRAGMA table_info(holds)")}
+    if "user_id" in settings_cols and "user_id" in feedback_cols and "user_id" in holds_cols:
+        return  # already migrated (or a fresh DB, created with user_id already)
+
+    conn.execute(
+        """INSERT OR IGNORE INTO users (id, email, password_hash, created_at)
+           VALUES (?, 'legacy@local', '!', datetime('now'))""",
+        (LEGACY_USER_ID,))
+
+    if "user_id" not in settings_cols:
+        conn.executescript("""
+            ALTER TABLE settings RENAME TO settings_old;
+            CREATE TABLE settings (
+              user_id TEXT NOT NULL REFERENCES users(id),
+              key     TEXT NOT NULL,
+              value   TEXT NOT NULL,
+              PRIMARY KEY (user_id, key)
+            );
+        """)
+        conn.execute(
+            "INSERT INTO settings (user_id, key, value) SELECT ?, key, value FROM settings_old",
+            (LEGACY_USER_ID,))
+        conn.execute("DROP TABLE settings_old")
+
+    if "user_id" not in feedback_cols:
+        conn.executescript("""
+            ALTER TABLE feedback RENAME TO feedback_old;
+            CREATE TABLE feedback (
+              user_id    TEXT NOT NULL REFERENCES users(id),
+              event_id   TEXT NOT NULL REFERENCES events(id),
+              verdict    TEXT NOT NULL,
+              lens       TEXT NOT NULL DEFAULT '',
+              note       TEXT,
+              created_at TEXT NOT NULL,
+              PRIMARY KEY (user_id, event_id, verdict, lens)
+            );
+        """)
+        conn.execute(
+            """INSERT INTO feedback (user_id, event_id, verdict, lens, note, created_at)
+               SELECT ?, event_id, verdict, lens, note, created_at FROM feedback_old""",
+            (LEGACY_USER_ID,))
+        conn.execute("DROP TABLE feedback_old")
+
+    if "user_id" not in holds_cols:
+        conn.executescript("""
+            ALTER TABLE holds RENAME TO holds_old;
+            CREATE TABLE holds (
+              user_id    TEXT NOT NULL REFERENCES users(id),
+              event_id   TEXT NOT NULL REFERENCES events(id),
+              lens       TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              PRIMARY KEY (user_id, event_id)
+            );
+        """)
+        conn.execute(
+            """INSERT INTO holds (user_id, event_id, lens, created_at)
+               SELECT ?, event_id, lens, created_at FROM holds_old""",
+            (LEGACY_USER_ID,))
+        conn.execute("DROP TABLE holds_old")
+
+
+def reassign_legacy_user(new_user_id: str) -> None:
+    """One-time: move LEGACY_USER_ID's settings/feedback/holds onto a real
+    account after the site owner signs up for real. Safe to call once; a
+    second call is a no-op since the legacy rows will already be gone."""
+    with get_conn() as conn:
+        for table in ("settings", "feedback", "holds"):
+            conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id = ?",
+                         (new_user_id, LEGACY_USER_ID))

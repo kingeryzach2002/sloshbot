@@ -1,49 +1,76 @@
-"""Sloshbot web app. Read-only over the DB except for feedback writes.
+"""Sloshbot web app. Thin HTTP layer that COMPOSES the read pipeline
+(data -> presenter -> filters -> policy) and renders it, plus the small write
+paths (feedback, holds, settings). Read-only over the DB except those writes.
+
+Public multi-user app: every route below the auth routes requires a signed-in
+user (session cookie via app.auth) — settings/feedback/holds are scoped to
+that user_id. The event catalog itself (events/scores/tags) is shared and
+crowdsourced across every user, deliberately unscoped — see app/data.py.
+
+  data.fetch_events   -> raw events + scores/tags/(this user's)feedback/host_rep
+  presenter.enrich    -> start/end datetimes, distance, calendar link
+  filters.apply       -> the hard filters (source/price/distance/tag/booze)
+  policy.rank         -> composite/tier, source demotion, per-day cap, sort
 
 Run: uv run uvicorn app.main:app --reload
 """
-import math
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlencode
 
-from fastapi import FastAPI, Form
+from fastapi import Depends, FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
+from app import data, filters, policy, presenter
+from app.auth import (RedirectToLogin, authenticate, create_user,
+                      login_redirect_handler, require_user_api, require_user_html)
+from app.models import Event
 from db import get_conn, init_db
-from ingest.geocode import _CACHE_DDL, _lookup
-from scoring.weights import (LENSES, MAX_PICKS, NEVER_CONFIDENT_SOURCES, WEIGHTS,
-                             TIER_CONFIDENT, TIER_MAYBE, composite, tier)
+from ingest.geocode import geocode
+from scoring.weights import (LENS_META, LENSES, TIER_CONFIDENT, TIER_MAYBE,
+                             WEIGHTS)
 
 app = FastAPI(title="sloshbot")
+# Signs the session cookie. SLOSHBOT_SECRET_KEY must be set to a real random
+# value when hosting publicly — the fallback is fine for local dev only (it
+# just means every restart invalidates existing sessions, not a security hole
+# by itself, but a fixed/guessable key would let anyone forge a session).
+app.add_middleware(SessionMiddleware,
+                   secret_key=os.environ.get("SLOSHBOT_SECRET_KEY", "dev-insecure-secret-change-me"),
+                   same_site="lax")
+app.add_exception_handler(RedirectToLogin, login_redirect_handler)
+
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 templates.env.globals["scoring_info"] = {
     "weights": WEIGHTS, "confident": TIER_CONFIDENT, "maybe": TIER_MAYBE,
 }
+# Fallback lens for views (week/calendar) that never thread an active lens
+# through — derived from LENSES so it can't drift from a hardcoded literal.
+templates.env.globals["default_lens"] = LENSES[0]
+templates.env.globals["lens_meta"] = LENS_META
+# Verdicts that contradict each other: setting one clears the other. Defined
+# once here and injected into the client JS (see _feedback.html) so the pairing
+# rule lives in exactly one place.
+FEEDBACK_PAIRS = {"went": "skipped", "skipped": "went",
+                  "as_promised": "not_as_promised", "not_as_promised": "as_promised"}
+templates.env.globals["feedback_pairs"] = FEEDBACK_PAIRS
 init_db()
 
 
-def get_settings() -> dict:
-    with get_conn() as conn:
-        return {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM settings")}
-
-
-def included_tags(settings: dict) -> list[str]:
-    raw = settings.get("included_tags", "")
-    return [t for t in raw.split(",") if t]
-
-
-def included_sources(settings: dict) -> list[str]:
-    raw = settings.get("included_sources", "")
-    return [s for s in raw.split(",") if s]
-
-
-def price_filter(settings: dict) -> str:
-    v = settings.get("price_filter", "")
-    return v if v in ("free", "paid") else ""
+def load_events(user_id: str, start: datetime, end: datetime,
+                max_mi: float | None = None,
+                min_booze: float | None = None) -> list[Event]:
+    """The read pipeline: fetch -> enrich -> filter -> rank. Returns tiered,
+    capped, sorted events (hidden-tier already dropped)."""
+    events = data.fetch_events(start, end, user_id)
+    settings = data.get_settings(user_id)
+    presenter.enrich(events, settings)          # start/end dt, distance, gcal
+    events = filters.apply(events, settings, max_mi, min_booze)
+    return policy.rank(events)                  # composite/tier, demote, cap, sort
 
 
 def is_warming_up() -> bool:
@@ -55,242 +82,63 @@ def is_warming_up() -> bool:
         return conn.execute("SELECT NOT EXISTS(SELECT 1 FROM events)").fetchone()[0] == 1
 
 
-def tag_counts() -> list[dict]:
-    """Tags on upcoming events with frequency, most common first — feeds the
-    sidebar chip cloud (counts match what the filter actually affects)."""
-    now = datetime.now().isoformat()
-    with get_conn() as conn:
-        return [dict(r) for r in conn.execute(
-            """SELECT t.tag, count(*) AS n FROM event_tags t
-               JOIN events e ON e.id = t.event_id
-               WHERE e.starts_at >= ? AND e.duplicate_of IS NULL
-               GROUP BY t.tag ORDER BY n DESC, t.tag""", (now,))]
+def _chip_counts_now(user_id: str) -> dict:
+    """Filter-chip counts over the same upcoming 7-day window the views query,
+    restricted to the hidden-tier-visible subset (see filters.chip_counts)."""
+    now = datetime.now()
+    return filters.chip_counts(data.fetch_events(now, now + timedelta(days=7), user_id))
 
 
-def source_counts() -> list[dict]:
-    """Sources on upcoming events with frequency, most events first — feeds the
-    sidebar's source filter (added once 5 more scrapers started flooding the
-    feed; lets the user mute a noisy source without losing the rest)."""
-    now = datetime.now().isoformat()
-    with get_conn() as conn:
-        return [dict(r) for r in conn.execute(
-            """SELECT source, count(*) AS n FROM events
-               WHERE starts_at >= ? AND duplicate_of IS NULL
-               GROUP BY source ORDER BY n DESC, source""", (now,))]
+@app.get("/signup", response_class=HTMLResponse)
+def signup_form(request: Request, error: str | None = None):
+    return templates.TemplateResponse(request, "signup.html", {"error": error})
 
 
-def price_counts() -> dict:
-    """Free vs. paid counts on upcoming events — feeds the sidebar's price
-    filter. Events with unknown is_free count toward neither."""
-    now = datetime.now().isoformat()
-    with get_conn() as conn:
-        row = conn.execute(
-            """SELECT sum(CASE WHEN is_free = 1 THEN 1 ELSE 0 END) AS free,
-                      sum(CASE WHEN is_free = 0 THEN 1 ELSE 0 END) AS paid
-               FROM events WHERE starts_at >= ? AND duplicate_of IS NULL""", (now,)).fetchone()
-    return {"free": row["free"] or 0, "paid": row["paid"] or 0}
-
-
-def home_coords(settings: dict) -> tuple[float, float] | None:
+@app.post("/signup")
+def signup(request: Request, email: str = Form(...), password: str = Form(...),
+          password_confirm: str = Form(...)):
+    if len(password) < 8:
+        return templates.TemplateResponse(request, "signup.html",
+            {"error": "Password must be at least 8 characters."})
+    if password != password_confirm:
+        return templates.TemplateResponse(request, "signup.html",
+            {"error": "Passwords don't match."})
     try:
-        return float(settings["home_lat"]), float(settings["home_lon"])
-    except (KeyError, ValueError):
-        return None
+        user_id = create_user(email, password)
+    except ValueError as exc:
+        return templates.TemplateResponse(request, "signup.html", {"error": str(exc)})
+    request.session["user_id"] = user_id
+    return RedirectResponse("/", status_code=303)
 
 
-def haversine_mi(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    rlat1, rlat2 = math.radians(lat1), math.radians(lat2)
-    a = (math.sin(math.radians(lat2 - lat1) / 2) ** 2
-         + math.cos(rlat1) * math.cos(rlat2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2)
-    return 3958.8 * 2 * math.asin(math.sqrt(a))
+@app.get("/login", response_class=HTMLResponse)
+def login_form(request: Request, error: str | None = None, next: str = "/"):
+    return templates.TemplateResponse(request, "login.html", {"error": error, "next": next})
 
 
-def gcal_link(e: dict) -> str:
-    """Pre-filled Google Calendar template link — a tentative hold, no OAuth."""
-    def gfmt(iso: str) -> str:
-        return datetime.fromisoformat(iso).strftime("%Y%m%dT%H%M%S")
-
-    start = gfmt(e["starts_at"])
-    end = gfmt(e["ends_at"]) if e["ends_at"] else gfmt(
-        (datetime.fromisoformat(e["starts_at"]) + timedelta(hours=2)).isoformat())
-    params = {
-        "action": "TEMPLATE",
-        "text": f"[hold] {e['title']}",
-        "dates": f"{start}/{end}",
-        "location": ", ".join(filter(None, [e["venue_name"], e["address"]])),
-        "details": f"{e['url']}\n\nAdded by sloshbot (tentative hold)",
-        "crm": "TENTATIVE",
-    }
-    return "https://calendar.google.com/calendar/render?" + urlencode(params)
+@app.post("/login")
+def login(request: Request, email: str = Form(...), password: str = Form(...),
+         next: str = Form("/")):
+    user_id = authenticate(email, password)
+    if not user_id:
+        return templates.TemplateResponse(request, "login.html",
+            {"error": "Incorrect email or password.", "next": next})
+    request.session["user_id"] = user_id
+    return RedirectResponse(next or "/", status_code=303)
 
 
-def load_events(start: datetime, end: datetime,
-                max_mi: float | None = None,
-                min_booze: float | None = None) -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            """SELECT * FROM events WHERE starts_at >= ? AND starts_at < ?
-               AND duplicate_of IS NULL ORDER BY starts_at""",
-            (start.isoformat(), end.isoformat()),
-        ).fetchall()
-        score_rows = conn.execute("SELECT * FROM scores").fetchall()
-        fb_rows = conn.execute("SELECT event_id, verdict FROM feedback").fetchall()
-        tag_rows = conn.execute("SELECT event_id, tag FROM event_tags ORDER BY tag").fetchall()
-        rep_rows = conn.execute(
-            """SELECT ev.host_name AS host, f.verdict, count(*) AS n
-               FROM feedback f JOIN events ev ON ev.id = f.event_id
-               WHERE f.verdict IN ('as_promised', 'not_as_promised')
-                 AND ev.host_name IS NOT NULL
-               GROUP BY ev.host_name, f.verdict""").fetchall()
-
-    scores: dict[str, dict] = defaultdict(dict)
-    rationales: dict[str, dict] = defaultdict(dict)
-    for s in score_rows:
-        scores[s["event_id"]][s["scorer"]] = s["score"]
-        rationales[s["event_id"]][s["scorer"]] = s["rationale"]
-    feedback = defaultdict(set)
-    for f in fb_rows:
-        feedback[f["event_id"]].add(f["verdict"])
-    tags = defaultdict(list)
-    for t in tag_rows:
-        tags[t["event_id"]].append(t["tag"])
-    host_rep: dict[str, dict] = defaultdict(lambda: {"ok": 0, "miss": 0})
-    for r in rep_rows:
-        host_rep[r["host"]]["ok" if r["verdict"] == "as_promised" else "miss"] += r["n"]
-
-    settings = get_settings()
-    home = home_coords(settings)
-    weights = WEIGHTS
-    inc_tags = set(included_tags(settings))
-    inc_sources = set(included_sources(settings))
-    price = price_filter(settings)
-    events = []
-    for r in rows:
-        e = dict(r)
-        if inc_sources and e["source"] not in inc_sources:
-            continue  # source filter is a hard filter — every event has a source
-        if price and e["is_free"] != (1 if price == "free" else 0):
-            continue  # unknown is_free matches neither free nor paid
-        e["distance_mi"] = (haversine_mi(home[0], home[1], e["lat"], e["lon"])
-                            if home and e["lat"] is not None else None)
-        if max_mi is not None and e["distance_mi"] is not None and e["distance_mi"] > max_mi:
-            continue  # events with unknown location are never dropped by the filter
-        e["tags"] = tags.get(e["id"], [])
-        if inc_tags and e["tags"] and not (inc_tags & set(e["tags"])):
-            continue  # tag filter is a hard filter; untagged events are never dropped by it
-        e["scores"] = scores.get(e["id"], {})
-        if min_booze is not None and e["scores"].get("booze", 0) < min_booze:
-            continue  # confidence filter: unscored events count as 0, unlike the tag filter
-        e["rationales"] = rationales.get(e["id"], {})
-        e["composite"] = composite(e["scores"], weights)
-        e["tier"] = tier(e["scores"], weights) if e["scores"] else "maybe"  # unscored -> maybe, never hidden
-        if e["tier"] == "confident" and e["source"] in NEVER_CONFIDENT_SOURCES:
-            e["tier"] = "maybe"  # nightlife listings never win a confident slot
-        e["feedback"] = feedback.get(e["id"], set())
-        e["host_rep"] = host_rep.get(e["host_name"]) if e["host_name"] else None
-        e["gcal"] = gcal_link(e)
-        e["start_dt"] = datetime.fromisoformat(e["starts_at"])
-        e["end_dt"] = (datetime.fromisoformat(e["ends_at"]) if e["ends_at"]
-                       else e["start_dt"] + timedelta(hours=2))  # same default as gcal_link
-        if e["tier"] != "hidden":
-            events.append(e)
-    # Hard cap on the top tier, per day: only the MAX_PICKS best composites
-    # each day stay "confident"; the overflow demotes to maybe. Scarcity is
-    # deliberate, but a week-wide cap let a handful of great days anywhere in
-    # the window crowd out every other day's picks — cap by day instead so
-    # every day gets its own shot, and re-run after filters so it stays
-    # filter-sensitive (a tighter distance/tag/booze filter can promote
-    # events that lost the day's competition before).
-    by_day: dict = defaultdict(list)
-    for e in events:
-        if e["tier"] == "confident":
-            by_day[e["start_dt"].date()].append(e)
-    for day_picks in by_day.values():
-        day_picks.sort(key=lambda e: -e["composite"])
-        for e in day_picks[MAX_PICKS:]:
-            e["tier"] = "maybe"
-    events.sort(key=lambda e: (e["starts_at"], -e["composite"]))
-    return events
-
-
-def day_label(d) -> str:
-    """Relative day names — time reads as distance from now, not a datebook."""
-    today = datetime.now().date()
-    if d == today:
-        return "Tonight"
-    if d == today + timedelta(days=1):
-        return "Tomorrow"
-    return d.strftime("%A · %b %-d")
-
-
-def group_by_day(events: list[dict]) -> list[tuple[str, list[dict]]]:
-    days: dict[str, list] = defaultdict(list)
-    for e in events:
-        days[day_label(e["start_dt"].date())].append(e)
-    return list(days.items())
-
-
-# Calendar grid runs 8am–midnight; earlier/later events are clamped to the edges.
-CAL_START_MIN = 8 * 60
-CAL_END_MIN = 24 * 60
-CAL_SPAN = CAL_END_MIN - CAL_START_MIN
-CAL_MAX_PER_DAY = 8  # scarcity: only each day's top matches land on the grid
-
-
-def layout_day(events: list[dict]) -> list[dict]:
-    """Position events in a day column: top/height as % of the grid, and a
-    lane index so overlapping events sit side by side (Google Calendar style)."""
-    blocks = []
-    for e in events:
-        s = e["start_dt"].hour * 60 + e["start_dt"].minute
-        dur = int((e["end_dt"] - e["start_dt"]).total_seconds() // 60)
-        end = min(s + max(dur, 30), CAL_END_MIN)  # 30min floor keeps blocks tappable
-        s = max(s, CAL_START_MIN)
-        if end <= s:
-            continue
-        blocks.append({"e": e, "s": s, "end": end})
-    blocks.sort(key=lambda b: (b["s"], -b["end"]))
-
-    # Greedy lane assignment within clusters of transitively-overlapping events.
-    cluster: list[dict] = []
-    cluster_end = 0
-
-    def flush() -> None:
-        lanes: list[int] = []  # occupied-until minute per lane
-        for b in cluster:
-            for i, lane_end in enumerate(lanes):
-                if lane_end <= b["s"]:
-                    lanes[i] = b["end"]
-                    b["lane"] = i
-                    break
-            else:
-                b["lane"] = len(lanes)
-                lanes.append(b["end"])
-        for b in cluster:
-            b["n_lanes"] = len(lanes)
-
-    for b in blocks:
-        if cluster and b["s"] >= cluster_end:
-            flush()
-            cluster = []
-        cluster.append(b)
-        cluster_end = max(cluster_end, b["end"]) if len(cluster) > 1 else b["end"]
-    if cluster:
-        flush()
-
-    for b in blocks:
-        b["top"] = (b["s"] - CAL_START_MIN) / CAL_SPAN * 100
-        b["height"] = (b["end"] - b["s"]) / CAL_SPAN * 100
-        b["left"] = b["lane"] / b["n_lanes"] * 100
-        b["width"] = 100 / b["n_lanes"]
-    return blocks
+@app.post("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)
 
 
 @app.get("/calendar", response_class=HTMLResponse)
-def calendar(request: Request, max_mi: float | None = None, min_booze: float | None = None):
+def calendar(request: Request, max_mi: float | None = None, min_booze: float | None = None,
+            user_id: str = Depends(require_user_html)):
     now = datetime.now()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    events = load_events(today, today + timedelta(days=7), max_mi, min_booze)
+    events = load_events(user_id, today, today + timedelta(days=7), max_mi, min_booze)
     by_date = defaultdict(list)
     for e in events:
         by_date[e["start_dt"].date()].append(e)
@@ -300,42 +148,48 @@ def calendar(request: Request, max_mi: float | None = None, min_booze: float | N
         # Keep only each day's top matches — the grid is for spotting the best
         # of the day and time conflicts, not for browsing all ~100 events.
         day_evts = sorted(by_date.get(d.date(), []), key=lambda e: -e["composite"])
-        shown = day_evts[:CAL_MAX_PER_DAY]
+        shown = day_evts[:presenter.CAL_MAX_PER_DAY]
         days.append({
             "label": d.strftime("%a"),
             "num": d.strftime("%-d"),
             "is_today": i == 0,
-            "blocks": layout_day(shown),
+            "blocks": presenter.layout_day(shown),
             "hidden": len(day_evts) - len(shown),
         })
     now_min = now.hour * 60 + now.minute
-    settings = get_settings()
+    settings = data.get_settings(user_id)
+    counts = _chip_counts_now(user_id)
     return templates.TemplateResponse(request, "calendar.html", {
         "days": days,
+        "no_events": not any(d["blocks"] or d["hidden"] for d in days),
         "view": "calendar",
         "hours": list(range(8, 24)),
-        "cap": CAL_MAX_PER_DAY,
-        "now_pct": ((now_min - CAL_START_MIN) / CAL_SPAN * 100
-                    if CAL_START_MIN <= now_min < CAL_END_MIN else None),
+        "cap": presenter.CAL_MAX_PER_DAY,
+        "now_pct": ((now_min - presenter.CAL_START_MIN) / presenter.CAL_SPAN * 100
+                    if presenter.CAL_START_MIN <= now_min < presenter.CAL_END_MIN else None),
         "max_mi": max_mi,
         "min_booze": min_booze,
-        "has_home": home_coords(settings) is not None,
-        "tag_counts": tag_counts(), "included_tags": included_tags(settings),
-        "source_counts": source_counts(), "included_sources": included_sources(settings),
-        "price_filter": price_filter(settings), "price_counts": price_counts(),
+        "has_home": presenter.home_coords(settings) is not None,
+        "tag_counts": counts["tags"], "included_tags": filters.included_tags(settings),
+        "source_counts": counts["sources"], "included_sources": filters.included_sources(settings),
+        "price_filter": filters.price_filter(settings), "price_counts": counts["price"],
+        "warming_up": is_warming_up(),
     })
 
 
-def pending_debrief() -> dict | None:
-    """Most recent held event that has ended and has no feedback yet."""
+def pending_debrief(user_id: str) -> dict | None:
+    """This user's most recent held event that has ended and that THEY have
+    no feedback on yet (feedback is per-viewer; holds are per-viewer too)."""
     now_iso = datetime.now().isoformat(timespec="seconds")
     with get_conn() as conn:
         row = conn.execute(
             """SELECT h.event_id, h.lens, e.title, e.starts_at
                FROM holds h JOIN events e ON e.id = h.event_id
-               WHERE COALESCE(e.ends_at, e.starts_at) < ?
-                 AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.event_id = h.event_id)
-               ORDER BY e.starts_at DESC LIMIT 1""", (now_iso,)).fetchone()
+               WHERE h.user_id = ?
+                 AND COALESCE(e.ends_at, e.starts_at) < ?
+                 AND NOT EXISTS (SELECT 1 FROM feedback f
+                                 WHERE f.event_id = h.event_id AND f.user_id = h.user_id)
+               ORDER BY e.starts_at DESC LIMIT 1""", (user_id, now_iso)).fetchone()
     if not row:
         return None
     d = dict(row)
@@ -346,14 +200,14 @@ def pending_debrief() -> dict | None:
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, lens: str = "", max_mi: float | None = None,
-         min_booze: float | None = None):
+         min_booze: float | None = None, user_id: str = Depends(require_user_html)):
     """Hero view: the single best move tonight under the active lens."""
     if lens not in LENSES:
         lens = LENSES[0]
     now = datetime.now()
-    events = load_events(now - timedelta(hours=1), now + timedelta(days=7), max_mi, min_booze)
+    events = load_events(user_id, now - timedelta(hours=1), now + timedelta(days=7), max_mi, min_booze)
 
-    settings = get_settings()
+    settings = data.get_settings(user_id)
     # Single lens ("booze"), so match is just the composite (booze) score.
     for e in events:
         e["match"] = e["composite"]
@@ -374,44 +228,47 @@ def home(request: Request, lens: str = "", max_mi: float | None = None,
             hero_label = f"next up — {hero['start_dt'].strftime('%A')}"
     later = [e for e in events if e is not hero and (not tonight_evts or e["start_dt"].date() != today)]
 
+    counts = _chip_counts_now(user_id)
     return templates.TemplateResponse(request, "home.html", {
         "view": "tonight",
         "lens": lens, "lenses": LENSES,
         "hero": hero, "hero_label": hero_label,
         "backups": backups,
-        "later_days": group_by_day(later),
+        "later_days": presenter.group_by_day(later),
         "n_later": len(later),
-        "debrief": pending_debrief(),
+        "debrief": pending_debrief(user_id),
         "max_mi": max_mi,
         "min_booze": min_booze,
-        "has_home": home_coords(settings) is not None,
-        "included_tags": included_tags(settings),
-        "tag_counts": tag_counts(),
-        "included_sources": included_sources(settings),
-        "source_counts": source_counts(),
-        "price_filter": price_filter(settings),
-        "price_counts": price_counts(),
+        "has_home": presenter.home_coords(settings) is not None,
+        "included_tags": filters.included_tags(settings),
+        "tag_counts": counts["tags"],
+        "included_sources": filters.included_sources(settings),
+        "source_counts": counts["sources"],
+        "price_filter": filters.price_filter(settings),
+        "price_counts": counts["price"],
         "weights": WEIGHTS,
         "warming_up": is_warming_up(),
     })
 
 
 @app.get("/week", response_class=HTMLResponse)
-def week(request: Request, max_mi: float | None = None, min_booze: float | None = None):
+def week(request: Request, max_mi: float | None = None, min_booze: float | None = None,
+        user_id: str = Depends(require_user_html)):
     now = datetime.now()
-    events = load_events(now - timedelta(hours=3), now + timedelta(days=7), max_mi, min_booze)
-    settings = get_settings()
+    events = load_events(user_id, now - timedelta(hours=3), now + timedelta(days=7), max_mi, min_booze)
+    settings = data.get_settings(user_id)
+    counts = _chip_counts_now(user_id)
     return templates.TemplateResponse(request, "week.html", {
-        "days": group_by_day(events),
+        "days": presenter.group_by_day(events),
         "view": "week",
         "max_mi": max_mi,
         "min_booze": min_booze,
-        "has_home": home_coords(settings) is not None,
+        "has_home": presenter.home_coords(settings) is not None,
         "weights": WEIGHTS,
         "n_confident": sum(1 for e in events if e["tier"] == "confident"),
-        "tag_counts": tag_counts(), "included_tags": included_tags(settings),
-        "source_counts": source_counts(), "included_sources": included_sources(settings),
-        "price_filter": price_filter(settings), "price_counts": price_counts(),
+        "tag_counts": counts["tags"], "included_tags": filters.included_tags(settings),
+        "source_counts": counts["sources"], "included_sources": filters.included_sources(settings),
+        "price_filter": filters.price_filter(settings), "price_counts": counts["price"],
         "warming_up": is_warming_up(),
     })
 
@@ -422,11 +279,12 @@ def tonight():
 
 
 @app.get("/map", response_class=HTMLResponse)
-def map_view(request: Request, max_mi: float | None = None):
+def map_view(request: Request, max_mi: float | None = None,
+            user_id: str = Depends(require_user_html)):
     now = datetime.now()
-    events = load_events(now - timedelta(hours=3), now + timedelta(days=7), max_mi)
-    settings = get_settings()
-    home = home_coords(settings)
+    events = load_events(user_id, now - timedelta(hours=3), now + timedelta(days=7), max_mi)
+    settings = data.get_settings(user_id)
+    home = presenter.home_coords(settings)
     pins = [{
         "lat": e["lat"], "lon": e["lon"], "title": e["title"],
         "tier": e["tier"], "url": e["url"], "gcal": e["gcal"],
@@ -435,6 +293,7 @@ def map_view(request: Request, max_mi: float | None = None):
         "booze": round(e["scores"].get("booze", 0) * 100),
         "distance": round(e["distance_mi"], 1) if e["distance_mi"] is not None else None,
     } for e in events if e["lat"] is not None]
+    counts = _chip_counts_now(user_id)
     return templates.TemplateResponse(request, "map.html", {
         "view": "map",
         "pins": pins,
@@ -443,18 +302,35 @@ def map_view(request: Request, max_mi: float | None = None):
         "max_mi": max_mi,
         "has_home": home is not None,
         "n_unmapped": sum(1 for e in events if e["lat"] is None),
-        "tag_counts": tag_counts(), "included_tags": included_tags(settings),
-        "source_counts": source_counts(), "included_sources": included_sources(settings),
-        "price_filter": price_filter(settings), "price_counts": price_counts(),
+        "tag_counts": counts["tags"], "included_tags": filters.included_tags(settings),
+        "source_counts": counts["sources"], "included_sources": filters.included_sources(settings),
+        "price_filter": filters.price_filter(settings), "price_counts": counts["price"],
     })
 
 
+# --- JSON API: the serialization seam. Same pipeline as the HTML views, but
+# returns Event.to_dict() so a future client-rendered frontend needs no new
+# backend logic — just these endpoints. ---
+@app.get("/api/events")
+def api_events(days: int = 7, max_mi: float | None = None, min_booze: float | None = None,
+               user_id: str = Depends(require_user_api)):
+    now = datetime.now()
+    events = load_events(user_id, now - timedelta(hours=1), now + timedelta(days=days), max_mi, min_booze)
+    return {"events": [e.to_dict() for e in events]}
+
+
+@app.get("/api/counts")
+def api_counts(user_id: str = Depends(require_user_api)):
+    return _chip_counts_now(user_id)
+
+
 @app.post("/settings/tags/toggle")
-def toggle_tag_filter(tag: str):
+def toggle_tag_filter(tag: str, user_id: str = Depends(require_user_api)):
     """One-tap tag filtering: clicking a tag chip anywhere flips it in/out of
     the included_tags setting."""
     with get_conn() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE key = 'included_tags'").fetchone()
+        row = conn.execute("SELECT value FROM settings WHERE user_id = ? AND key = 'included_tags'",
+                           (user_id,)).fetchone()
         current = [t for t in (row["value"] if row else "").split(",") if t]
         if tag in current:
             current.remove(tag)
@@ -462,23 +338,24 @@ def toggle_tag_filter(tag: str):
         else:
             current.append(tag)
             state = "on"
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('included_tags', ?)",
-                     (",".join(current),))
+        conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'included_tags', ?)",
+                     (user_id, ",".join(current)))
     return {"ok": True, "state": state}
 
 
 @app.post("/settings/tags/clear")
-def clear_tag_filter():
+def clear_tag_filter(user_id: str = Depends(require_user_api)):
     with get_conn() as conn:
-        conn.execute("DELETE FROM settings WHERE key = 'included_tags'")
+        conn.execute("DELETE FROM settings WHERE user_id = ? AND key = 'included_tags'", (user_id,))
     return {"ok": True}
 
 
 @app.post("/settings/sources/toggle")
-def toggle_source_filter(source: str):
+def toggle_source_filter(source: str, user_id: str = Depends(require_user_api)):
     """One-tap source filtering: mute a noisy scraper without hiding everything."""
     with get_conn() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE key = 'included_sources'").fetchone()
+        row = conn.execute("SELECT value FROM settings WHERE user_id = ? AND key = 'included_sources'",
+                           (user_id,)).fetchone()
         current = [s for s in (row["value"] if row else "").split(",") if s]
         if source in current:
             current.remove(source)
@@ -486,91 +363,91 @@ def toggle_source_filter(source: str):
         else:
             current.append(source)
             state = "on"
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('included_sources', ?)",
-                     (",".join(current),))
+        conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'included_sources', ?)",
+                     (user_id, ",".join(current)))
     return {"ok": True, "state": state}
 
 
 @app.post("/settings/sources/clear")
-def clear_source_filter():
+def clear_source_filter(user_id: str = Depends(require_user_api)):
     with get_conn() as conn:
-        conn.execute("DELETE FROM settings WHERE key = 'included_sources'")
+        conn.execute("DELETE FROM settings WHERE user_id = ? AND key = 'included_sources'", (user_id,))
     return {"ok": True}
 
 
 @app.post("/settings/price/toggle")
-def toggle_price_filter(value: str):
+def toggle_price_filter(value: str, user_id: str = Depends(require_user_api)):
     """Single-select free/paid filter: picking the active value clears it."""
     assert value in ("free", "paid")
     with get_conn() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE key = 'price_filter'").fetchone()
+        row = conn.execute("SELECT value FROM settings WHERE user_id = ? AND key = 'price_filter'",
+                           (user_id,)).fetchone()
         current = row["value"] if row else ""
         new = "" if current == value else value
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('price_filter', ?)",
-                     (new,))
+        conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'price_filter', ?)",
+                     (user_id, new))
     return {"ok": True, "state": "on" if new else "off"}
 
 
 @app.post("/settings/price/clear")
-def clear_price_filter():
+def clear_price_filter(user_id: str = Depends(require_user_api)):
     with get_conn() as conn:
-        conn.execute("DELETE FROM settings WHERE key = 'price_filter'")
+        conn.execute("DELETE FROM settings WHERE user_id = ? AND key = 'price_filter'", (user_id,))
     return {"ok": True}
 
 
 @app.post("/settings/home")
-def set_home(home_address: str = Form(...)):
-    """Save home address and geocode it inline (single Nominatim call, cached)."""
+def set_home(home_address: str = Form(...), user_id: str = Depends(require_user_html)):
+    """Save home address and geocode it inline (single Nominatim call, cached).
+    Uses the public ingest.geocode.geocode() — no reaching into pipeline privates."""
+    addr = home_address.strip()
     with get_conn() as conn:
-        conn.execute(_CACHE_DDL)
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('home_address', ?)",
-                     (home_address.strip(),))
-        lat, lon = _lookup(conn, home_address.strip())
+        conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_address', ?)",
+                     (user_id, addr))
+        lat, lon = geocode(conn, addr)
         if lat is not None:
-            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('home_lat', ?)", (str(lat),))
-            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('home_lon', ?)", (str(lon),))
+            conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_lat', ?)",
+                         (user_id, str(lat)))
+            conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_lon', ?)",
+                         (user_id, str(lon)))
         else:
-            conn.execute("DELETE FROM settings WHERE key IN ('home_lat', 'home_lon')")
+            conn.execute("DELETE FROM settings WHERE user_id = ? AND key IN ('home_lat', 'home_lon')",
+                         (user_id,))
     return RedirectResponse("/map", status_code=303)
 
 
-# Verdicts that contradict each other: setting one clears the other.
-# went/skipped are universal (lens ''); the promise pair is scoped to a lens.
-FEEDBACK_PAIRS = {"went": "skipped", "skipped": "went",
-                  "as_promised": "not_as_promised", "not_as_promised": "as_promised"}
-
-
 @app.post("/feedback/{event_id}/{verdict}")
-def toggle_feedback(event_id: str, verdict: str, lens: str = ""):
+def toggle_feedback(event_id: str, verdict: str, lens: str = "",
+                    user_id: str = Depends(require_user_api)):
     """Toggle a verdict: on if absent, off if present. Clears its opposite."""
     assert verdict in FEEDBACK_PAIRS
     if verdict in ("went", "skipped"):
         lens = ""
     with get_conn() as conn:
         exists = conn.execute(
-            "SELECT 1 FROM feedback WHERE event_id = ? AND verdict = ? AND lens = ?",
-            (event_id, verdict, lens),
+            "SELECT 1 FROM feedback WHERE user_id = ? AND event_id = ? AND verdict = ? AND lens = ?",
+            (user_id, event_id, verdict, lens),
         ).fetchone()
         if exists:
-            conn.execute("DELETE FROM feedback WHERE event_id = ? AND verdict = ? AND lens = ?",
-                         (event_id, verdict, lens))
+            conn.execute("DELETE FROM feedback WHERE user_id = ? AND event_id = ? AND verdict = ? AND lens = ?",
+                         (user_id, event_id, verdict, lens))
             return {"ok": True, "state": "off"}
-        conn.execute("DELETE FROM feedback WHERE event_id = ? AND verdict = ? AND lens = ?",
-                     (event_id, FEEDBACK_PAIRS[verdict], lens))
+        conn.execute("DELETE FROM feedback WHERE user_id = ? AND event_id = ? AND verdict = ? AND lens = ?",
+                     (user_id, event_id, FEEDBACK_PAIRS[verdict], lens))
         conn.execute(
-            "INSERT INTO feedback (event_id, verdict, lens, created_at) VALUES (?,?,?,?)",
-            (event_id, verdict, lens, datetime.now().isoformat(timespec="seconds")),
+            "INSERT INTO feedback (user_id, event_id, verdict, lens, created_at) VALUES (?,?,?,?,?)",
+            (user_id, event_id, verdict, lens, datetime.now().isoformat(timespec="seconds")),
         )
     return {"ok": True, "state": "on"}
 
 
 @app.post("/hold/{event_id}")
-def record_hold(event_id: str, lens: str = ""):
-    """Remember that the user placed a calendar hold — feeds the debrief."""
+def record_hold(event_id: str, lens: str = "", user_id: str = Depends(require_user_api)):
+    """Remember that the user placed a calendar hold — feeds their debrief."""
     with get_conn() as conn:
         conn.execute(
-            """INSERT INTO holds (event_id, lens, created_at) VALUES (?,?,?)
-               ON CONFLICT(event_id) DO NOTHING""",
-            (event_id, lens, datetime.now().isoformat(timespec="seconds")),
+            """INSERT INTO holds (user_id, event_id, lens, created_at) VALUES (?,?,?,?)
+               ON CONFLICT(user_id, event_id) DO NOTHING""",
+            (user_id, event_id, lens, datetime.now().isoformat(timespec="seconds")),
         )
     return {"ok": True}
