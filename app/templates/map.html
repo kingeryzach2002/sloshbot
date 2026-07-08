@@ -6,22 +6,11 @@
 <title>sloshbot — map</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% include "_theme.html" %}
 <style>
-  :root {
-    --bg: #12100e; --card: #1c1917; --card2: #211d1a; --text: #ece7e0;
-    --muted: #a39a8e; --line: #322c26; --gold: #e8b34b; --gold-dim: #8a6a2a;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.5 -apple-system, "Segoe UI", sans-serif;
-         display: flex; flex-direction: column; height: 100vh; }
+  body { display: flex; flex-direction: column; height: 100vh; }
   .bar { display: flex; align-items: center; gap: 14px; padding: 12px 16px;
          flex-wrap: wrap; border-bottom: 1px solid var(--line); }
-  h1 { font-size: 20px; margin: 0; letter-spacing: -0.02em; }
-  h1 .tip { color: var(--gold); }
-  nav a { color: var(--muted); text-decoration: none; margin-right: 8px;
-          padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); font-size: 13px; }
-  nav a.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: 600; }
   form.home { display: flex; gap: 6px; margin-left: auto; }
   input[type=text] { background: var(--card2); border: 1px solid var(--line); color: var(--text);
           border-radius: 8px; padding: 5px 10px; font-size: 13px; width: 260px; }
@@ -39,7 +28,7 @@
 </head>
 <body>
 <div class="bar">
-  <h1>slosh<span class="tip">bot</span></h1>
+  <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
   <nav>
     <a href="/">Tonight</a>
     <a href="/week">This week</a>

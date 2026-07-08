@@ -159,10 +159,20 @@ def load_events(start: datetime, end: datetime,
     return events
 
 
+def day_label(d) -> str:
+    """Relative day names — time reads as distance from now, not a datebook."""
+    today = datetime.now().date()
+    if d == today:
+        return "Tonight"
+    if d == today + timedelta(days=1):
+        return "Tomorrow"
+    return d.strftime("%A · %b %-d")
+
+
 def group_by_day(events: list[dict]) -> list[tuple[str, list[dict]]]:
     days: dict[str, list] = defaultdict(list)
     for e in events:
-        days[e["start_dt"].strftime("%A %b %-d")].append(e)
+        days[day_label(e["start_dt"].date())].append(e)
     return list(days.items())
 
 

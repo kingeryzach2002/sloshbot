@@ -1,9 +1,8 @@
 <div class="card {{ e.tier }}">
   <div class="row1">
     <span class="title"><a href="{{ e.url }}" target="_blank">{{ e.title }}</a></span>
-    <span class="badge {{ e.tier }}"
-          title="match = weighted blend: booze {{ (e.scores.booze * 100) | round | int if e.scores.booze is defined else '?' }}×{{ scoring_info.weights.booze }} + logistics {{ (e.scores.logistics * 100) | round | int if e.scores.logistics is defined else '?' }}×{{ scoring_info.weights.logistics }}"
-    >{{ e.tier }} · {{ (e.composite * 100) | round | int }} match</span>
+    <span class="arc {{ 'dim' if e.tier != 'confident' }}" style="--p: {{ (e.composite * 100) | round | int }}"
+          title="match {{ (e.composite * 100) | round | int }} — hover the details below for the blend"></span>
   </div>
   <div class="meta">
     {{ e.start_dt.strftime("%-I:%M %p") }}
@@ -18,14 +17,16 @@
     <div class="tags">{% for t in e.tags %}<span class="tag {{ 'on' if t in included_tags | default([]) }}"
       onclick="toggleTag('{{ t }}')" title="filter to this tag">{{ t }}</span>{% endfor %}</div>
   {% endif %}
-  {% if e.rationales.booze %}
-    <div class="whyline"><b>🍸 {{ (e.scores.booze * 100) | round | int }}%</b> — {{ e.rationales.booze }}</div>
+  {% if e.scores.booze is defined %}
+    <div class="whyline"><span class="meter" title="booze {{ (e.scores.booze * 100) | round | int }}%">&#127864;&nbsp;{% for i in range(5) %}<i class="{{ 'on' if e.scores.booze * 5 >= i + 0.5 }}"></i>{% endfor %}</span>
+      &nbsp;{{ e.rationales.booze }}</div>
   {% endif %}
   {% if e.rationales %}
     <details class="why-more">
-      <summary>why {{ (e.composite * 100) | round | int }} match?</summary>
+      <summary>the numbers</summary>
       <div class="why">
-        {% if e.rationales.booze %}<b>🍸 booze {{ (e.scores.booze * 100) | round | int }}%</b> — {{ e.rationales.booze }}{% endif %}
+        <b>match {{ (e.composite * 100) | round | int }}</b> — weighted blend of:<br>
+        {% if e.rationales.booze %}<b>&#127864; booze {{ (e.scores.booze * 100) | round | int }}%</b> — {{ e.rationales.booze }}{% endif %}
         {% if e.rationales.logistics %}<br><b>logistics {{ (e.scores.logistics * 100) | round | int }}%</b> — {{ e.rationales.logistics }}{% endif %}
       </div>
     </details>

@@ -4,23 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sloshbot — calendar</title>
+{% include "_theme.html" %}
 <style>
-  :root {
-    --bg: #12100e; --card: #1c1917; --card2: #211d1a; --text: #ece7e0;
-    --muted: #a39a8e; --line: #322c26; --gold: #e8b34b; --gold-dim: #8a6a2a;
-    --green: #7fb069; --red: #c96f5e;
-    --hour-h: 56px; /* one hour of grid height */
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; }
+  :root { --hour-h: 56px; /* one hour of grid height */ }
   .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 40px; }
-  header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 16px; }
-  h1 { font-size: 22px; margin: 0; letter-spacing: -0.02em; }
-  h1 .tip { color: var(--gold); }
-  nav a { color: var(--muted); text-decoration: none; margin-right: 12px;
-          padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); }
-  nav a.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: 600; }
 
   .cal { display: grid; grid-template-columns: 52px repeat(7, 1fr);
          border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
@@ -64,7 +51,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>slosh<span class="tip">bot</span></h1>
+    <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
     <nav>
       <a href="/">Tonight</a>
       <a href="/week">This week</a>
