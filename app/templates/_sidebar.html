@@ -1,5 +1,5 @@
 {# Sticky filter/ranking sidebar — the single home for all filters.
-   Expects: back, weights, has_home, max_mi, tag_counts, included_tags.
+   Expects: back, weights, has_home, max_mi, min_booze, tag_counts, included_tags.
    Uses toggleTag()/clearFilters() defined by the including page. #}
 <style>
   .layout { display: flex; gap: 36px; align-items: flex-start; }
@@ -43,12 +43,24 @@
   {% if has_home %}
   <h4>distance</h4>
   <div>
-    <a class="schip {{ 'on' if not max_mi }}" href="{{ back }}">any</a>
+    <a class="schip {{ 'on' if not max_mi }}" href="{{ back }}{{ '?min_booze=' ~ min_booze if min_booze }}">any</a>
     {% for mi in [1, 2, 3, 5] %}
-      <a class="schip {{ 'on' if max_mi == mi }}" href="{{ back }}?max_mi={{ mi }}">&le; {{ mi }} mi</a>
+      <a class="schip {{ 'on' if max_mi == mi }}"
+         href="{{ back }}?max_mi={{ mi }}{{ '&min_booze=' ~ min_booze if min_booze }}">&le; {{ mi }} mi</a>
     {% endfor %}
   </div>
   {% endif %}
+
+  <h4>booze confidence</h4>
+  <div>
+    <a class="schip {{ 'on' if not min_booze }}" href="{{ back }}{{ '?max_mi=' ~ max_mi if max_mi }}"
+       title="show every event, including ones the booze scorer isn't confident about">any</a>
+    {% for pct in [50, 65, 80] %}
+      <a class="schip {{ 'on' if min_booze == pct / 100 }}"
+         href="{{ back }}?min_booze={{ pct / 100 }}{{ '&max_mi=' ~ max_mi if max_mi }}"
+         title="hide events the booze scorer rates below {{ pct }}%">&ge; {{ pct }}%</a>
+    {% endfor %}
+  </div>
 
   {% if tag_counts %}
   <h4>tags{% if included_tags %}<a class="clearlink" onclick="clearFilters('{{ back }}')">clear ({{ included_tags | length }})</a>{% endif %}</h4>

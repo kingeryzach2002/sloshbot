@@ -101,7 +101,8 @@ def gcal_link(e: dict) -> str:
 
 
 def load_events(start: datetime, end: datetime,
-                max_mi: float | None = None) -> list[dict]:
+                max_mi: float | None = None,
+                min_booze: float | None = None) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM events WHERE starts_at >= ? AND starts_at < ? ORDER BY starts_at",
@@ -147,6 +148,8 @@ def load_events(start: datetime, end: datetime,
         if inc_tags and e["tags"] and not (inc_tags & set(e["tags"])):
             continue  # tag filter is a hard filter; untagged events are never dropped by it
         e["scores"] = scores.get(e["id"], {})
+        if min_booze is not None and e["scores"].get("booze", 0) < min_booze:
+            continue  # confidence filter: unscored events count as 0, unlike the tag filter
         e["rationales"] = rationales.get(e["id"], {})
         e["composite"] = composite(e["scores"], weights)
         e["tier"] = tier(e["scores"], weights) if e["scores"] else "maybe"  # unscored -> maybe, never hidden
@@ -293,12 +296,13 @@ def pending_debrief() -> dict | None:
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, lens: str = "", max_mi: float | None = None):
+def home(request: Request, lens: str = "", max_mi: float | None = None,
+         min_booze: float | None = None):
     """Hero view: the single best move tonight under the active lens."""
     if lens not in LENSES:
         lens = LENSES[0]
     now = datetime.now()
-    events = load_events(now - timedelta(hours=1), now + timedelta(days=7), max_mi)
+    events = load_events(now - timedelta(hours=1), now + timedelta(days=7), max_mi, min_booze)
 
     settings = get_settings()
     base = active_weights(settings)
@@ -331,6 +335,7 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
         "n_later": len(later),
         "debrief": pending_debrief(),
         "max_mi": max_mi,
+        "min_booze": min_booze,
         "has_home": home_coords(settings) is not None,
         "included_tags": included_tags(settings),
         "tag_counts": tag_counts(),
@@ -340,14 +345,15 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
 
 
 @app.get("/week", response_class=HTMLResponse)
-def week(request: Request, max_mi: float | None = None):
+def week(request: Request, max_mi: float | None = None, min_booze: float | None = None):
     now = datetime.now()
-    events = load_events(now - timedelta(hours=3), now + timedelta(days=7), max_mi)
+    events = load_events(now - timedelta(hours=3), now + timedelta(days=7), max_mi, min_booze)
     settings = get_settings()
     return templates.TemplateResponse(request, "week.html", {
         "days": group_by_day(events),
         "view": "week",
         "max_mi": max_mi,
+        "min_booze": min_booze,
         "has_home": home_coords(settings) is not None,
         "weights": active_weights(settings),
         "n_confident": sum(1 for e in events if e["tier"] == "confident"),
