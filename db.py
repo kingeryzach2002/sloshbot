@@ -15,6 +15,12 @@ def get_conn() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 10000")  # parallel ingest runs share this DB
+    # WAL lets readers (web app) proceed while a writer (pipeline) holds a long
+    # transaction, instead of blocking page loads during a refresh. It's a
+    # persistent, per-database setting on first write, so setting it on every
+    # connection is redundant after the first — but harmless and self-healing
+    # (e.g. if the DB file is ever replaced/restored without WAL set).
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn
 
 

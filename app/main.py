@@ -155,6 +155,18 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
+# Deliberately has NO auth dependency: every other route requires a signed-in
+# user (require_user_html/require_user_api), but a host's health checker isn't
+# signed in and can't follow a 303 to /login — it just needs a plain 200. Keep
+# this endpoint dumb: no session, no user-scoped data, just proof the process
+# is alive and the DB is reachable.
+@app.get("/healthz")
+def healthz():
+    with get_conn() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+    return {"ok": True, "events": total}
+
+
 @app.get("/calendar", response_class=HTMLResponse)
 def calendar(request: Request, f: str | None = None, tags: str | None = None,
             sources: str | None = None, price: str | None = None,
