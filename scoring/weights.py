@@ -23,7 +23,7 @@ LENS_BOOST = 0.60  # the active lens's share of the blend when ranking
 TIER_CONFIDENT = 0.65  # >= this -> "confident"
 TIER_MAYBE = 0.40      # >= this -> "maybe"; below -> hidden
 
-MAX_PICKS = 3  # hard cap on top-tier events per loaded window — scarcity is the product
+MAX_PICKS = 3  # hard cap on top-tier events per day — scarcity is the product
 
 
 def lens_weights(lens: str, base: dict[str, float] | None = None) -> dict[str, float]:
