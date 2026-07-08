@@ -12,23 +12,29 @@ sloshbot/
 ├── sloshbot.db          # SQLite; the ONLY interface between pipeline and app
 ├── ingest/
 │   ├── schema.sql       # canonical DDL
-│   ├── sources/         # one module per source: luma.py, eventbrite.py, funcheap.py
-│   │   └── ...          # each exposes fetch() -> list[RawEvent]
+│   ├── sources/         # one module per source (luma, eventbrite, funcheap,
+│   │   └── ...          #   dothebay, garysguide, meetup, ra, nineteenhz);
+│   │                     #   each exposes fetch() -> list[RawEvent]
+│   ├── tags.py          # assigns each event tags from a hand-pruned vocabulary
+│   ├── dedup.py         # cross-source duplicate detection (sets duplicate_of)
+│   ├── geocode.py       # fills lat/lon from address (cached Nominatim lookups)
 │   ├── normalize.py     # RawEvent -> Event (schema below), dedup, upsert
 │   └── run.py           # CLI: python -m ingest.run [--source luma]
 ├── scoring/
 │   ├── scorers/         # each: score(event) -> {score: 0-1, rationale: str}
-│   │   ├── booze.py     # LLM + heuristics; MODULAR — pipeline works without it
-│   │   └── logistics.py # time/day/neighborhood fit (pure heuristic, no LLM)
+│   │   └── booze.py     # LLM + heuristics; the only scorer (see weights.py)
 │   ├── weights.py       # config: scorer weights + tier thresholds
+│   ├── eval.py          # eyeball the booze scorer against golden_set.csv
 │   └── run.py           # CLI: scores unscored events, caches results in DB;
 │                         #   discovers scorer modules dynamically
-├── app/
-│   ├── main.py          # FastAPI, server-rendered (Jinja), no build chain
-│   ├── templates/       # week view, tonight view, event card partial
-│   └── seed_dummy.py    # fake events so UI develops independently of ingest
-└── preferences.py       # single-user logistics prefs as code now; a table later
+└── app/
+    ├── main.py          # FastAPI, server-rendered (Jinja), no build chain
+    └── templates/       # tonight/week/calendar/map views + partials
 ```
+
+Run locally with `uv run uvicorn app.main:app --reload`; refresh data with
+`python -m ingest.run` then `python -m scoring.run` (no deploy config in the
+repo — that's added when a host is chosen).
 
 Event-type preference used to be a third scorer ("category"/"fit") driven by a
 hardcoded keyword dict in `preferences.py`. It's gone in favor of a tag filter:
@@ -80,7 +86,7 @@ CREATE TABLE events (
 
 CREATE TABLE scores (
   event_id  TEXT NOT NULL REFERENCES events(id),
-  scorer    TEXT NOT NULL,         -- 'booze' | 'category' | 'logistics' | ...
+  scorer    TEXT NOT NULL,         -- 'booze' (the only scorer today; more may join)
   score     REAL NOT NULL,         -- 0.0–1.0
   rationale TEXT NOT NULL,         -- shown in UI as "why we think this"
   scored_at TEXT NOT NULL,
@@ -124,9 +130,10 @@ Cross-source dedup (same party on Luma AND Eventbrite) = fuzzy match on
 0. **Design stance** — sloshbot is a recommender, not a browser. The home view
    answers "what's my move tonight" with ONE hero pick; the top tier is hard-
    capped at 3 picks per window (scarcity = taste). "Booze" is a *lens* — one
-   pluggable perk scorer among future ones (food, ...); ranking, rationale, and
-   verdicts all key off the active lens (`LENSES` in scoring/weights.py), so
-   nothing perk-specific is hardcoded in the UI. Voice stays neutral.
+   pluggable perk scorer — today it's the only one, so ranking is just the booze
+   score; adding a perk (food, live music) means adding a scorer + weight in
+   `scoring/weights.py`. Event-type preference is the tag filter, not a scorer.
+   Voice stays neutral.
 1. **Tonight view (home)** — hero pick + collapsed backups + collapsed
    "everything else this week" compact rows. Includes the morning-after
    debrief: after a held event ends, one card asks went/skipped and
@@ -142,13 +149,13 @@ Cross-source dedup (same party on Luma AND Eventbrite) = fuzzy match on
 4. **Add to calendar** — pre-filled Google Calendar template link
    (`calendar.google.com/calendar/render?action=TEMPLATE&...`). Creates a
    tentative hold, zero OAuth. Overlapping holds are fine by design.
-5. **Feedback taps** — went / skipped / booze-confirmed / booze-lie. One tap,
+5. **Feedback taps** — went / skipped, and booze yes / no. One tap,
    writes to `feedback`, no page reload needed beyond a swap.
 
 ## Deliberate v1 exclusions
 
-- No auth, no multi-user (but prefs isolated in `preferences.py`, scoring
-  config in `weights.py`, so multi-user is additive later, not a rewrite).
+- No auth, no multi-user (scoring config in `weights.py`, filters in the
+  `settings` table, so multi-user is additive later, not a rewrite).
 - No Calendar API / OAuth — template links only.
 - No auto-apply to gated events (`rsvp_type` captured now to enable it later).
 - No Partiful (no public discovery surface; revisit via Gmail invite parsing).
