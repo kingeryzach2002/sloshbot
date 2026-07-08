@@ -25,7 +25,10 @@ def init_db() -> None:
         conn.executescript(SCHEMA_PATH.read_text())
         # additive migrations for DBs created before a column existed
         existing = {r["name"] for r in conn.execute("PRAGMA table_info(events)")}
-        for col, ddl in [("lat", "lat REAL"), ("lon", "lon REAL")]:
+        # duplicate_of: NULL = canonical/unique; else the id of the canonical
+        # event this row duplicates (set by the cross-source dedup pass).
+        for col, ddl in [("lat", "lat REAL"), ("lon", "lon REAL"),
+                         ("duplicate_of", "duplicate_of TEXT")]:
             if col not in existing:
                 conn.execute(f"ALTER TABLE events ADD COLUMN {ddl}")
         # feedback gained a lens column + generic verdicts; rebuild pre-lens tables

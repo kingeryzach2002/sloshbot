@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+{% if warming_up %}<meta http-equiv="refresh" content="12">{% endif %}
 <title>sloshbot</title>
 {% include "_theme.html" %}
 <style>
@@ -41,7 +42,17 @@
   <p class="sub">{{ n_confident }} confident pick{{ '' if n_confident == 1 else 's' }} in the next 7 days</p>
 
   {% if not days %}
-    <div class="empty"><div class="coupe"></div>Nothing on the radar. Run the ingest pipeline.</div>
+    {% if warming_up %}
+      <div class="empty"><div class="coupe pouring"><i></i></div>
+        Pouring your first round — fetching events now.<br>
+        <small>This page refreshes itself in a moment.</small></div>
+    {% elif included_tags or max_mi %}
+      <div class="empty"><div class="coupe"></div>Nothing matches your filters.<br>
+        <small>Loosen them to see more.</small></div>
+    {% else %}
+      <div class="empty"><div class="coupe"></div>Nothing on the radar.<br>
+        <small>Check back soon — new events land a few times a day.</small></div>
+    {% endif %}
   {% endif %}
 
   {% for day, events in days %}
@@ -82,6 +93,17 @@
   </div><!-- /layout -->
 </div>
 <script>
+  const FB_PAIRS = { went: "skipped", skipped: "went",
+                     as_promised: "not_as_promised", not_as_promised: "as_promised" };
+  async function fb(btn, eventId, verdict, lens) {
+    const res = await fetch(`/feedback/${eventId}/${verdict}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
+    const { state } = await res.json();
+    btn.classList.toggle("done", state === "on");
+    if (state === "on") {
+      const other = btn.parentElement.querySelector(`[data-verdict="${FB_PAIRS[verdict]}"]`);
+      if (other) other.classList.remove("done");
+    }
+  }
   async function toggleTag(tag) {
     await fetch(`/settings/tags/toggle?tag=${encodeURIComponent(tag)}`, { method: "POST" });
     location.reload();

@@ -32,6 +32,18 @@
     </details>
   {% endif %}
   <div class="actions">
-    <button class="btn primary" onclick="hold(this, '{{ e.id }}', '{{ e.gcal }}', '{{ lens | default('') }}')">+ hold on calendar</button>
+    <button class="btn primary" onclick="hold(this, '{{ e.id }}', '{{ e.gcal }}', '{{ lens | default('booze') }}')">+ hold on calendar</button>
+  </div>
+  <div class="fbrow">
+    <span class="fbq">did you go?</span>
+    <button class="btn sm {{ 'done' if 'went' in e.feedback }}" data-verdict="went"
+            onclick="fb(this, '{{ e.id }}', 'went', '')">went</button>
+    <button class="btn sm {{ 'done' if 'skipped' in e.feedback }}" data-verdict="skipped"
+            onclick="fb(this, '{{ e.id }}', 'skipped', '')">skipped</button>
+    <span class="fbq">&#127864; booze?</span>
+    <button class="btn sm {{ 'done' if 'as_promised' in e.feedback }}" data-verdict="as_promised"
+            onclick="fb(this, '{{ e.id }}', 'as_promised', 'booze')">as promised</button>
+    <button class="btn sm miss {{ 'done' if 'not_as_promised' in e.feedback }}" data-verdict="not_as_promised"
+            onclick="fb(this, '{{ e.id }}', 'not_as_promised', 'booze')">a lie</button>
   </div>
 </div>

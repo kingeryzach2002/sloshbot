@@ -36,6 +36,15 @@ def included_tags(settings: dict) -> list[str]:
     return [t for t in raw.split(",") if t]
 
 
+def is_warming_up() -> bool:
+    """True on a fresh deploy before the first scrape has landed any events.
+    Lets the empty state say "fetching…" (and auto-refresh) instead of blaming
+    the user for an empty pipeline. Once any event exists, an empty window is a
+    genuinely quiet week, not a cold start."""
+    with get_conn() as conn:
+        return conn.execute("SELECT NOT EXISTS(SELECT 1 FROM events)").fetchone()[0] == 1
+
+
 def tag_counts() -> list[dict]:
     """Tags on upcoming events with frequency, most common first — feeds the
     sidebar chip cloud (counts match what the filter actually affects)."""
@@ -319,6 +328,7 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
         "included_tags": included_tags(settings),
         "tag_counts": tag_counts(),
         "weights": base,
+        "warming_up": is_warming_up(),
     })
 
 
@@ -335,6 +345,7 @@ def week(request: Request, max_mi: float | None = None):
         "weights": active_weights(settings),
         "n_confident": sum(1 for e in events if e["tier"] == "confident"),
         "tag_counts": tag_counts(), "included_tags": included_tags(settings),
+        "warming_up": is_warming_up(),
     })
 
 

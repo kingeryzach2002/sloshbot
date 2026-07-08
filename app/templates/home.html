@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+{% if warming_up %}<meta http-equiv="refresh" content="12">{% endif %}
 <title>sloshbot</title>
 {% include "_theme.html" %}
 <style>
@@ -84,7 +85,17 @@
   {% endif %}
 
   {% if not hero %}
-    <div class="empty"><div class="coupe"></div>Nothing on the radar this week. Run the ingest pipeline.</div>
+    {% if warming_up %}
+      <div class="empty"><div class="coupe pouring"><i></i></div>
+        Pouring your first round — fetching events now.<br>
+        <small>This page refreshes itself in a moment.</small></div>
+    {% elif included_tags or max_mi %}
+      <div class="empty"><div class="coupe"></div>Nothing matches your filters this week.<br>
+        <small>Loosen them above to see more.</small></div>
+    {% else %}
+      <div class="empty"><div class="coupe"></div>Nothing on the radar this week.<br>
+        <small>Check back soon — new events land a few times a day.</small></div>
+    {% endif %}
   {% else %}
   <div class="hero">
     <div class="label"><span class="pulse"></span>{{ hero_label }}</div>

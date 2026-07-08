@@ -8,18 +8,25 @@ Default: all sources, limit 30 each. One source failing does not kill the rest.
 from __future__ import annotations
 
 import argparse
+import importlib
+import pkgutil
 import sys
 import traceback
 
 from db import init_db
 from ingest.normalize import upsert
-from ingest.sources import eventbrite, funcheap, luma
+import ingest.sources
 
-SOURCES = {
-    "luma": luma.fetch,
-    "funcheap": funcheap.fetch,
-    "eventbrite": eventbrite.fetch,
-}
+# Auto-discover source modules: any ingest/sources/<name>.py exposing fetch().
+# New sources just drop in a module — no edit here needed (avoids merge conflicts
+# when several source modules are added in parallel).
+SOURCES = {}
+for _finder, _name, _ in pkgutil.iter_modules(ingest.sources.__path__):
+    if _name.startswith("_"):
+        continue
+    _mod = importlib.import_module(f"ingest.sources.{_name}")
+    if hasattr(_mod, "fetch"):
+        SOURCES[_name] = _mod.fetch
 
 
 def main() -> int:

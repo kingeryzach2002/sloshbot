@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS events (
   image_url    TEXT,
   lat          REAL,
   lon          REAL,
+  duplicate_of TEXT,                       -- NULL = canonical; else id of the event this duplicates
   raw          TEXT,
   scraped_at   TEXT NOT NULL,
   UNIQUE(source, source_id)
