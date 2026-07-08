@@ -31,6 +31,42 @@
     --serif: "Fraunces", Georgia, serif;
     --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
     --ease: cubic-bezier(0.2, 0.9, 0.3, 1.15);
+    /* meta = a temperature choice. Default keeps the current cool sage so the
+       "Current" palette is a true baseline; every new palette warms it. */
+    --meta: var(--cool);
+    /* tactile surfaces derive from the card tokens so palettes re-theme for free */
+    --surf-hi: var(--card2); --surf-lo: var(--card);
+    --sheen: rgba(237, 230, 218, 0.05);      /* warm top-light on a coaster */
+    --sheen-c: rgba(232, 179, 75, 0.14);     /* gold spill on the lit pick */
+    --gold-press: var(--gold-press);                   /* the pressed edge of a gold button */
+  }
+
+  /* === candlelight — monochrome warm; one temperature, no cool at all === */
+  .lab[data-pal="candle"] {
+    --bg: #100b06; --card: #17110a; --card2: #20180f;
+    --text: #f0e5d3; --muted: #a58e73; --faint: #6f5c44;
+    --line: #2a2014; --line2: #3a2d1c;
+    --gold: #d8a441; --gold-dim: #84632c; --gold-glow: rgba(216, 164, 65, 0.12);
+    --gold-press: #9c6f22; --sheen-c: rgba(216, 164, 65, 0.14);
+    --meta: #a58e73; --green: #9a8c46; --red: #b46a4a;
+  }
+  /* === brass & oxblood — warm gold + a deep claret pulled from leather/wine === */
+  .lab[data-pal="brass"] {
+    --bg: #0f0908; --card: #170f0c; --card2: #201512;
+    --text: #ece0d3; --muted: #9f8879; --faint: #6b544a;
+    --line: #281c17; --line2: #38281f;
+    --gold: #cf9b3e; --gold-dim: #7a5a2a; --gold-glow: rgba(207, 155, 62, 0.11);
+    --gold-press: #936a24; --sheen-c: rgba(207, 155, 62, 0.13);
+    --meta: #a98d7f; --green: #7e8a4e; --red: #9c4a44;
+  }
+  /* === gilt & patina — aged gold + a verdigris/absinthe green (bottle glass) === */
+  .lab[data-pal="patina"] {
+    --bg: #0d0c08; --card: #15130c; --card2: #1e1a11;
+    --text: #ece5d3; --muted: #99896f; --faint: #675a44;
+    --line: #262114; --line2: #352d1c;
+    --gold: #d9a63f; --gold-dim: #7d6029; --gold-glow: rgba(217, 166, 63, 0.11);
+    --gold-press: #987424; --sheen-c: rgba(217, 166, 63, 0.13);
+    --meta: #99896f; --green: #6f9079; --red: #a85f4a;
   }
 
   .lab { background: var(--bg); color: var(--text);
@@ -56,7 +92,10 @@
   .switch { position: sticky; top: 0; z-index: 20; background: rgba(14,12,9,0.86);
             backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
             padding: 10px 0; margin-bottom: 8px; }
-  .switch .wrap { display: flex; gap: 8px; align-items: center; }
+  .switch .wrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; row-gap: 8px; }
+  .seg-lbl { color: var(--faint); font-size: 10.5px; text-transform: uppercase;
+             letter-spacing: 0.12em; margin: 0 1px 0 6px; }
+  .seg-lbl:first-child { margin-left: 0; }
   .switch .seg { display: inline-flex; gap: 3px; background: var(--card2);
                  border: 1px solid var(--line); border-radius: 99px; padding: 3px; }
   .switch button { font: inherit; font-size: 12.5px; color: var(--muted); cursor: pointer;
@@ -75,7 +114,7 @@
                    color: var(--gold-dim); }
   .dhead h2 { font-family: var(--serif); font-style: italic; font-weight: 600;
               font-size: 27px; margin: 6px 0 0; text-wrap: balance; }
-  .dhead .thesis { color: var(--cool); font-size: 14px; margin: 8px 0 0; max-width: 60ch; }
+  .dhead .thesis { color: var(--meta); font-size: 14px; margin: 8px 0 0; max-width: 60ch; }
   .dhead .tradeoff { color: var(--faint); font-size: 12.5px; margin: 10px 0 0; max-width: 64ch; }
   .dhead .tradeoff b { color: var(--muted); font-weight: 600; }
 
@@ -118,7 +157,7 @@
   .ed-score .n { font-family: var(--serif); font-size: 30px; font-weight: 600;
                  color: var(--muted); font-variant-numeric: tabular-nums; }
   .ed-entry.confident .ed-score .n { color: var(--gold); }
-  .ed-meta { color: var(--cool); font-size: 13px; margin-top: 8px; }
+  .ed-meta { color: var(--meta); font-size: 13px; margin-top: 8px; }
   .ed-meta .free { color: var(--green); }
   .ed-meta .rep { color: var(--green); }
   .ed-why { font-family: var(--serif); font-style: italic; font-size: 15px;
@@ -156,7 +195,7 @@
   .in-readout { font-family: var(--mono); font-size: 12px; color: var(--faint);
                 letter-spacing: 0.02em; }
   .in-readout b { color: var(--gold); font-weight: 600; }
-  .in-card:not(.confident) .in-readout b { color: var(--cool); }
+  .in-card:not(.confident) .in-readout b { color: var(--meta); }
   /* segmented match bar */
   .in-bar { display: flex; gap: 2px; margin: 11px 0 12px; }
   .in-bar i { height: 6px; flex: 1; background: var(--line2); border-radius: 1px;
@@ -170,7 +209,7 @@
   .in-kv { display: flex; justify-content: space-between; gap: 8px;
            border-bottom: 1px dotted var(--line2); padding-bottom: 2px; }
   .in-kv .k { color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
-  .in-kv .v { color: var(--cool); }
+  .in-kv .v { color: var(--meta); }
   .in-kv .v.free { color: var(--green); }
   .in-kv .v.hi { color: var(--text); }
   .in-tags { font-family: var(--mono); font-size: 11px; color: var(--faint);
@@ -199,10 +238,10 @@
      ===================================================================== */
   .ta-card { position: relative; border-radius: 16px; padding: 18px 18px 16px;
              background:
-               radial-gradient(120% 80% at 50% -10%, rgba(237,230,218,0.05), transparent 60%),
-               linear-gradient(180deg, #1b160f, #14100b);
+               radial-gradient(120% 80% at 50% -10%, var(--sheen), transparent 60%),
+               linear-gradient(180deg, var(--surf-hi), var(--surf-lo));
              border: 1px solid var(--line);
-             box-shadow: 0 1px 0 rgba(237,230,218,0.05) inset,
+             box-shadow: 0 1px 0 var(--sheen) inset,
                          0 14px 28px -18px rgba(0,0,0,0.9);
              transition: transform .2s var(--ease), box-shadow .3s var(--ease); }
   .ta-card:hover { transform: translateY(-3px);
@@ -213,10 +252,10 @@
                          0 8px 18px -14px rgba(0,0,0,0.9); }
   .ta-card.confident {
              background:
-               radial-gradient(120% 90% at 50% -10%, rgba(232,179,75,0.14), transparent 60%),
-               linear-gradient(180deg, #201810, #16110b);
+               radial-gradient(120% 90% at 50% -10%, var(--sheen-c), transparent 60%),
+               linear-gradient(180deg, var(--surf-hi), var(--surf-lo));
              border-color: var(--gold-dim);
-             box-shadow: 0 1px 0 rgba(232,179,75,0.14) inset,
+             box-shadow: 0 1px 0 var(--sheen-c) inset,
                          0 0 30px -10px var(--gold-glow),
                          0 16px 30px -18px rgba(0,0,0,0.9); }
   .ta-top { display: flex; align-items: center; gap: 14px; }
@@ -238,7 +277,7 @@
   .coupe .foot { position: absolute; left: 50%; bottom: 1px; width: 18px; height: 1.5px;
                  background: var(--gold-dim); transform: translateX(-50%); }
   .coupe.dim .stem, .coupe.dim .foot { background: var(--line2); }
-  .ta-meta { color: var(--cool); font-size: 13px; margin-top: 9px; }
+  .ta-meta { color: var(--meta); font-size: 13px; margin-top: 9px; }
   .ta-meta .free { color: var(--green); }
   .ta-meta .rep { color: var(--green); }
   .ta-why { font-size: 13px; color: var(--muted); margin-top: 9px; }
@@ -249,10 +288,10 @@
                   box-shadow: 0 1px 0 rgba(237,230,218,0.04) inset; }
   .ta-hold { font-size: 12.5px; font-weight: 650; color: var(--bg); background: var(--gold);
              border: none; border-radius: 9px; padding: 7px 14px; cursor: pointer;
-             box-shadow: 0 3px 0 #a9791f, 0 6px 12px -6px rgba(0,0,0,0.8);
+             box-shadow: 0 3px 0 var(--gold-press), 0 6px 12px -6px rgba(0,0,0,0.8);
              transition: transform .1s var(--ease), box-shadow .1s var(--ease); }
-  .ta-hold:hover { transform: translateY(-1px); box-shadow: 0 4px 0 #a9791f, 0 8px 14px -6px rgba(0,0,0,0.8); }
-  .ta-hold:active { transform: translateY(3px); box-shadow: 0 0 0 #a9791f, 0 2px 6px -4px rgba(0,0,0,0.8); }
+  .ta-hold:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--gold-press), 0 8px 14px -6px rgba(0,0,0,0.8); }
+  .ta-hold:active { transform: translateY(3px); box-shadow: 0 0 0 var(--gold-press), 0 2px 6px -4px rgba(0,0,0,0.8); }
   .ta-hold:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
   /* rubber-stamp verdict */
   .ta-stamp-row { display: flex; align-items: center; gap: 8px; margin-top: 13px;
@@ -277,12 +316,19 @@
 <div class="lab">
   <div class="switch">
     <div class="wrap">
+      <span class="seg-lbl">layout</span>
       <div class="seg" role="tablist" aria-label="Card direction">
         <button role="tab" aria-current="true" data-go="ed">Editorial</button>
         <button role="tab" aria-current="false" data-go="in">Instrument</button>
         <button role="tab" aria-current="false" data-go="ta">Tactile</button>
       </div>
-      <span style="color:var(--faint);font-size:12px;margin-left:4px;">same three events, three treatments</span>
+      <span class="seg-lbl">palette</span>
+      <div class="seg" role="tablist" aria-label="Palette">
+        <button aria-current="true" data-pal="">Current</button>
+        <button aria-current="false" data-pal="candle">Candlelight</button>
+        <button aria-current="false" data-pal="brass">Brass &amp; oxblood</button>
+        <button aria-current="false" data-pal="patina">Gilt &amp; patina</button>
+      </div>
     </div>
   </div>
 
@@ -474,6 +520,15 @@
     const now = b.getAttribute("aria-pressed") === "true";
     b.parentElement.querySelectorAll("[data-toggle]").forEach(s => s.setAttribute("aria-pressed","false"));
     b.setAttribute("aria-pressed", now ? "false" : "true");
+  }));
+
+  // palette switcher: re-theme the whole lab by swapping token sets
+  const lab = document.querySelector(".lab");
+  const palBtns = [...document.querySelectorAll(".switch [data-pal]")];
+  palBtns.forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.pal) lab.setAttribute("data-pal", b.dataset.pal);
+    else lab.removeAttribute("data-pal");
+    palBtns.forEach(x => x.setAttribute("aria-current", x === b ? "true" : "false"));
   }));
 
   // sticky switcher: scroll to section + reflect active on scroll
