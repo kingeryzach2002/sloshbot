@@ -60,6 +60,9 @@
     </nav>
   </header>
 
+  {% set back = '/calendar' %}
+  {% include "_filterbar.html" %}
+
   <div class="cal">
     <div class="cal-head"></div>
     {% for d in days %}

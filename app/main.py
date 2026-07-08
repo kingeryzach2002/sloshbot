@@ -41,6 +41,11 @@ def included_sources(settings: dict) -> list[str]:
     return [s for s in raw.split(",") if s]
 
 
+def price_filter(settings: dict) -> str:
+    v = settings.get("price_filter", "")
+    return v if v in ("free", "paid") else ""
+
+
 def is_warming_up() -> bool:
     """True on a fresh deploy before the first scrape has landed any events.
     Lets the empty state say "fetching…" (and auto-refresh) instead of blaming
@@ -72,6 +77,18 @@ def source_counts() -> list[dict]:
             """SELECT source, count(*) AS n FROM events
                WHERE starts_at >= ? AND duplicate_of IS NULL
                GROUP BY source ORDER BY n DESC, source""", (now,))]
+
+
+def price_counts() -> dict:
+    """Free vs. paid counts on upcoming events — feeds the sidebar's price
+    filter. Events with unknown is_free count toward neither."""
+    now = datetime.now().isoformat()
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT sum(CASE WHEN is_free = 1 THEN 1 ELSE 0 END) AS free,
+                      sum(CASE WHEN is_free = 0 THEN 1 ELSE 0 END) AS paid
+               FROM events WHERE starts_at >= ? AND duplicate_of IS NULL""", (now,)).fetchone()
+    return {"free": row["free"] or 0, "paid": row["paid"] or 0}
 
 
 def home_coords(settings: dict) -> tuple[float, float] | None:
@@ -145,11 +162,14 @@ def load_events(start: datetime, end: datetime,
     weights = WEIGHTS
     inc_tags = set(included_tags(settings))
     inc_sources = set(included_sources(settings))
+    price = price_filter(settings)
     events = []
     for r in rows:
         e = dict(r)
         if inc_sources and e["source"] not in inc_sources:
             continue  # source filter is a hard filter — every event has a source
+        if price and e["is_free"] != (1 if price == "free" else 0):
+            continue  # unknown is_free matches neither free nor paid
         e["distance_mi"] = (haversine_mi(home[0], home[1], e["lat"], e["lon"])
                             if home and e["lat"] is not None else None)
         if max_mi is not None and e["distance_mi"] is not None and e["distance_mi"] > max_mi:
@@ -275,6 +295,7 @@ def calendar(request: Request, max_mi: float | None = None):
             "hidden": len(day_evts) - len(shown),
         })
     now_min = now.hour * 60 + now.minute
+    settings = get_settings()
     return templates.TemplateResponse(request, "calendar.html", {
         "days": days,
         "view": "calendar",
@@ -282,6 +303,11 @@ def calendar(request: Request, max_mi: float | None = None):
         "cap": CAL_MAX_PER_DAY,
         "now_pct": ((now_min - CAL_START_MIN) / CAL_SPAN * 100
                     if CAL_START_MIN <= now_min < CAL_END_MIN else None),
+        "max_mi": max_mi,
+        "has_home": home_coords(settings) is not None,
+        "tag_counts": tag_counts(), "included_tags": included_tags(settings),
+        "source_counts": source_counts(), "included_sources": included_sources(settings),
+        "price_filter": price_filter(settings), "price_counts": price_counts(),
     })
 
 
@@ -346,6 +372,8 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
         "tag_counts": tag_counts(),
         "included_sources": included_sources(settings),
         "source_counts": source_counts(),
+        "price_filter": price_filter(settings),
+        "price_counts": price_counts(),
         "weights": WEIGHTS,
         "warming_up": is_warming_up(),
     })
@@ -365,6 +393,7 @@ def week(request: Request, max_mi: float | None = None):
         "n_confident": sum(1 for e in events if e["tier"] == "confident"),
         "tag_counts": tag_counts(), "included_tags": included_tags(settings),
         "source_counts": source_counts(), "included_sources": included_sources(settings),
+        "price_filter": price_filter(settings), "price_counts": price_counts(),
         "warming_up": is_warming_up(),
     })
 
@@ -394,7 +423,11 @@ def map_view(request: Request, max_mi: float | None = None):
         "home": {"lat": home[0], "lon": home[1]} if home else None,
         "home_address": settings.get("home_address", ""),
         "max_mi": max_mi,
+        "has_home": home is not None,
         "n_unmapped": sum(1 for e in events if e["lat"] is None),
+        "tag_counts": tag_counts(), "included_tags": included_tags(settings),
+        "source_counts": source_counts(), "included_sources": included_sources(settings),
+        "price_filter": price_filter(settings), "price_counts": price_counts(),
     })
 
 
@@ -444,6 +477,26 @@ def toggle_source_filter(source: str):
 def clear_source_filter():
     with get_conn() as conn:
         conn.execute("DELETE FROM settings WHERE key = 'included_sources'")
+    return {"ok": True}
+
+
+@app.post("/settings/price/toggle")
+def toggle_price_filter(value: str):
+    """Single-select free/paid filter: picking the active value clears it."""
+    assert value in ("free", "paid")
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'price_filter'").fetchone()
+        current = row["value"] if row else ""
+        new = "" if current == value else value
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('price_filter', ?)",
+                     (new,))
+    return {"ok": True, "state": "on" if new else "off"}
+
+
+@app.post("/settings/price/clear")
+def clear_price_filter():
+    with get_conn() as conn:
+        conn.execute("DELETE FROM settings WHERE key = 'price_filter'")
     return {"ok": True}
 
 

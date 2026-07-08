@@ -6,6 +6,8 @@
   </div>
   <div class="meta">
     {{ e.start_dt.strftime("%-I:%M %p") }}
+    {% if e.is_free == 1 %} · <span class="price free">free</span>
+    {% elif e.is_free == 0 %} · <span class="price paid">paid</span>{% endif %}
     · {{ e.venue_name or "venue TBA" }}{% if e.neighborhood %} ({{ e.neighborhood }}){% endif %}
     {% if e.host_name %} · by {{ e.host_name }}{% endif %}
     {% if e.rsvp_type and e.rsvp_type != 'open' %} · <span class="rsvp">{{ e.rsvp_type }}</span>{% endif %}
@@ -25,9 +27,8 @@
     <details class="why-more">
       <summary>the numbers</summary>
       <div class="why">
-        <b>match {{ (e.composite * 100) | round | int }}</b> — weighted blend of:<br>
+        <b>match {{ (e.composite * 100) | round | int }}</b><br>
         {% if e.rationales.booze %}<b>&#127864; booze {{ (e.scores.booze * 100) | round | int }}%</b> — {{ e.rationales.booze }}{% endif %}
-        {% if e.rationales.logistics %}<br><b>logistics {{ (e.scores.logistics * 100) | round | int }}%</b> — {{ e.rationales.logistics }}{% endif %}
       </div>
     </details>
   {% endif %}

@@ -7,7 +7,7 @@
 <title>sloshbot</title>
 {% include "_theme.html" %}
 <style>
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 20px 80px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
 
   .debrief { background: var(--card2); border: 1px solid var(--gold-dim); border-radius: 12px;
              padding: 14px 16px; margin-bottom: 22px; }
@@ -67,9 +67,7 @@
   </header>
 
   {% set back = '/' %}
-  <div class="layout">
-  {% include "_sidebar.html" %}
-  <div class="main">
+  {% include "_filterbar.html" %}
 
   {% if debrief %}
   <div class="debrief" id="debrief">
@@ -89,7 +87,7 @@
       <div class="empty"><div class="coupe pouring"><i></i></div>
         Pouring your first round — fetching events now.<br>
         <small>This page refreshes itself in a moment.</small></div>
-    {% elif included_tags or included_sources or max_mi %}
+    {% elif included_tags or included_sources or price_filter or max_mi %}
       <div class="empty"><div class="coupe"></div>Nothing matches your filters this week.<br>
         <small>Loosen them above to see more.</small></div>
     {% else %}
@@ -157,8 +155,6 @@
   </details>
   {% endif %}
   {% endif %}
-  </div><!-- /main -->
-  </div><!-- /layout -->
 </div>
 <script>
   const FB_PAIRS = { went: "skipped", skipped: "went",
@@ -171,22 +167,6 @@
       const other = btn.parentElement.querySelector(`[data-verdict="${FB_PAIRS[verdict]}"]`);
       if (other) other.classList.remove("done");
     }
-  }
-  async function toggleTag(tag) {
-    await fetch(`/settings/tags/toggle?tag=${encodeURIComponent(tag)}`, { method: "POST" });
-    location.reload();
-  }
-  async function clearFilters(back) {
-    await fetch("/settings/tags/clear", { method: "POST" });
-    location.href = back;
-  }
-  async function toggleSource(source) {
-    await fetch(`/settings/sources/toggle?source=${encodeURIComponent(source)}`, { method: "POST" });
-    location.reload();
-  }
-  async function clearSourceFilters(back) {
-    await fetch("/settings/sources/clear", { method: "POST" });
-    location.href = back;
   }
   async function hold(btn, eventId, gcal, lens) {
     fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });

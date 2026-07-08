@@ -7,7 +7,7 @@
 <title>sloshbot</title>
 {% include "_theme.html" %}
 <style>
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 20px 80px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
   .sub { color: var(--faint); margin: 0 0 22px; font-size: 12px; }
   h2.day { font-family: var(--serif); font-style: italic; font-weight: 600;
            font-size: 18px; color: var(--text); letter-spacing: 0;
@@ -36,9 +36,7 @@
   </header>
 
   {% set back = '/week' %}
-  <div class="layout">
-  {% include "_sidebar.html" %}
-  <div class="main">
+  {% include "_filterbar.html" %}
   <p class="sub">{{ n_confident }} confident pick{{ '' if n_confident == 1 else 's' }} in the next 7 days</p>
 
   {% if not days %}
@@ -46,7 +44,7 @@
       <div class="empty"><div class="coupe pouring"><i></i></div>
         Pouring your first round — fetching events now.<br>
         <small>This page refreshes itself in a moment.</small></div>
-    {% elif included_tags or included_sources or max_mi %}
+    {% elif included_tags or included_sources or price_filter or max_mi %}
       <div class="empty"><div class="coupe"></div>Nothing matches your filters.<br>
         <small>Loosen them to see more.</small></div>
     {% else %}
@@ -76,8 +74,8 @@
       every card (exact number under "the numbers"): an LLM reads the full
       event listing and estimates the probability of free drinks, citing its
       evidence. The five-segment meter is that probability.<br><br>
-      Event-type preference isn't a score — it's the <b>tags</b> filter in the
-      sidebar. Pick the tags you're interested in and only matching events show
+      Event-type preference isn't a score — it's the <b>tags</b> filter above.
+      Pick the tags you're interested in and only matching events show
       up (events with no tags at all are never hidden by it).<br><br>
       The gold ring on each card is the <b>match</b>: the booze score. A bright,
       glowing card is a <b>confident</b> pick (≥{{ (scoring_info.confident * 100) | int }},
@@ -86,8 +84,6 @@
       Thresholds live in <code>scoring/weights.py</code>.
     </div>
   </details>
-  </div><!-- /main -->
-  </div><!-- /layout -->
 </div>
 <script>
   const FB_PAIRS = { went: "skipped", skipped: "went",
@@ -101,27 +97,11 @@
       if (other) other.classList.remove("done");
     }
   }
-  async function toggleTag(tag) {
-    await fetch(`/settings/tags/toggle?tag=${encodeURIComponent(tag)}`, { method: "POST" });
-    location.reload();
-  }
-  async function clearFilters(back) {
-    await fetch("/settings/tags/clear", { method: "POST" });
-    location.href = back;  // back has no query string, so max_mi drops too
-  }
-  async function toggleSource(source) {
-    await fetch(`/settings/sources/toggle?source=${encodeURIComponent(source)}`, { method: "POST" });
-    location.reload();
-  }
-  async function clearSourceFilters(back) {
-    await fetch("/settings/sources/clear", { method: "POST" });
-    location.href = back;
-  }
   async function hold(btn, eventId, gcal, lens) {
     fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
     window.open(gcal, "_blank");
     btn.classList.add("done");
-    btn.textContent = "held \u2713";
+    btn.textContent = "held ✓";
   }
 </script>
 </body>

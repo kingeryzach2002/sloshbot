@@ -13,3 +13,4 @@ sloshbot.db-*
 # local junk
 .DS_Store
 .session-trace/
+.claude/

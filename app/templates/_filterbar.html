@@ -1,0 +1,131 @@
+{# Top filter bar — custom dropdowns (no native <select>), the single home for
+   all filters across every view (Tonight/Week/Calendar/Map).
+   Expects: back, has_home, max_mi, tag_counts, included_tags,
+   source_counts, included_sources, price_counts, price_filter. #}
+<style>
+  .filterbar { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 22px; position: relative; z-index: 10; }
+  .fdrop { position: relative; }
+  .fbtn { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px;
+          padding: 6px 13px; border-radius: 9px; cursor: pointer;
+          border: 1px solid var(--line); background: var(--card2); color: var(--text);
+          transition: border-color .2s, color .2s; }
+  .fbtn:hover { border-color: var(--gold-dim); }
+  .fbtn.active { border-color: var(--gold); color: var(--gold); }
+  .fbtn .care { font-size: 9px; opacity: 0.6; transition: transform .15s var(--ease); }
+  .fbtn.open .care { transform: rotate(180deg); }
+  .fpanel { position: absolute; top: calc(100% + 8px); left: 0; min-width: 190px; max-width: 280px;
+            display: flex; flex-direction: column; gap: 1px;
+            background: var(--card2); border: 1px solid var(--line); border-radius: 12px;
+            padding: 7px; box-shadow: 0 14px 32px -10px rgba(0, 0, 0, 0.55); z-index: 30;
+            opacity: 0; visibility: hidden; transform: translateY(-4px);
+            transition: opacity .15s var(--ease), transform .15s var(--ease), visibility .15s; }
+  .fpanel.open { opacity: 1; visibility: visible; transform: translateY(0); }
+  .fpanel.scroll { max-height: 280px; overflow-y: auto; }
+  .fopt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px;
+          font-size: 13px; color: var(--muted); cursor: pointer; text-decoration: none;
+          white-space: nowrap; transition: background .15s, color .15s; }
+  .fopt:hover { background: var(--card); color: var(--text); }
+  .fopt.on, .fopt:has(input:checked) { color: var(--gold); }
+  .fopt input[type=checkbox] { accent-color: var(--gold); margin: 0; }
+  .fopt i { margin-left: auto; font-style: normal; opacity: 0.55; font-size: 11px; }
+  .fclear { display: block; text-align: center; margin-top: 3px; padding-top: 7px;
+            border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted);
+            text-decoration: underline; cursor: pointer; }
+  .fclear:hover { color: var(--red); }
+</style>
+<div class="filterbar">
+  {% if has_home %}
+  <div class="fdrop">
+    <button type="button" class="fbtn {{ 'active' if max_mi }}" onclick="toggleDropdown(this)">
+      distance{% if max_mi %} · &le;{{ max_mi | int }}mi{% endif %} <i class="care">&#9662;</i></button>
+    <div class="fpanel">
+      <a class="fopt {{ 'on' if not max_mi }}" href="{{ back }}">any distance</a>
+      {% for mi in [1, 2, 3, 5] %}
+        <a class="fopt {{ 'on' if max_mi == mi }}" href="{{ back }}?max_mi={{ mi }}">&le; {{ mi }} mi</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if tag_counts %}
+  <div class="fdrop">
+    <button type="button" class="fbtn {{ 'active' if included_tags }}" onclick="toggleDropdown(this)">
+      tags{% if included_tags %} · {{ included_tags | length }}{% endif %} <i class="care">&#9662;</i></button>
+    <div class="fpanel scroll">
+      {% for t in tag_counts %}
+        <label class="fopt"><input type="checkbox" {{ 'checked' if t.tag in included_tags }}
+               onchange="toggleTag('{{ t.tag }}')"> {{ t.tag }}<i>{{ t.n }}</i></label>
+      {% endfor %}
+      {% if included_tags %}<a class="fclear" onclick="clearFilters('{{ back }}')">clear all</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if source_counts and source_counts | length > 1 %}
+  <div class="fdrop">
+    <button type="button" class="fbtn {{ 'active' if included_sources }}" onclick="toggleDropdown(this)">
+      sources{% if included_sources %} · {{ included_sources | length }}{% endif %} <i class="care">&#9662;</i></button>
+    <div class="fpanel">
+      {% for s in source_counts %}
+        <label class="fopt"><input type="checkbox" {{ 'checked' if s.source in included_sources }}
+               onchange="toggleSource('{{ s.source }}')"> {{ s.source }}<i>{{ s.n }}</i></label>
+      {% endfor %}
+      {% if included_sources %}<a class="fclear" onclick="clearSourceFilters('{{ back }}')">clear all</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if price_counts and (price_counts.free or price_counts.paid) %}
+  <div class="fdrop">
+    <button type="button" class="fbtn {{ 'active' if price_filter }}" onclick="toggleDropdown(this)">
+      price{% if price_filter %} · {{ price_filter }}{% endif %} <i class="care">&#9662;</i></button>
+    <div class="fpanel">
+      {% if price_counts.free %}
+        <a class="fopt {{ 'on' if price_filter == 'free' }}" onclick="togglePrice('free')">free<i>{{ price_counts.free }}</i></a>
+      {% endif %}
+      {% if price_counts.paid %}
+        <a class="fopt {{ 'on' if price_filter == 'paid' }}" onclick="togglePrice('paid')">paid<i>{{ price_counts.paid }}</i></a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+<script>
+  function toggleDropdown(btn) {
+    const panel = btn.nextElementSibling;
+    const isOpen = panel.classList.contains("open");
+    document.querySelectorAll(".fpanel.open").forEach(p => p.classList.remove("open"));
+    document.querySelectorAll(".fbtn.open").forEach(b => b.classList.remove("open"));
+    if (!isOpen) { panel.classList.add("open"); btn.classList.add("open"); }
+  }
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".fdrop")) {
+      document.querySelectorAll(".fpanel.open").forEach(p => p.classList.remove("open"));
+      document.querySelectorAll(".fbtn.open").forEach(b => b.classList.remove("open"));
+    }
+  });
+  async function toggleTag(tag) {
+    await fetch(`/settings/tags/toggle?tag=${encodeURIComponent(tag)}`, { method: "POST" });
+    location.reload();
+  }
+  async function clearFilters(back) {
+    await fetch("/settings/tags/clear", { method: "POST" });
+    location.href = back;
+  }
+  async function toggleSource(source) {
+    await fetch(`/settings/sources/toggle?source=${encodeURIComponent(source)}`, { method: "POST" });
+    location.reload();
+  }
+  async function clearSourceFilters(back) {
+    await fetch("/settings/sources/clear", { method: "POST" });
+    location.href = back;
+  }
+  async function togglePrice(value) {
+    await fetch(`/settings/price/toggle?value=${encodeURIComponent(value)}`, { method: "POST" });
+    location.reload();
+  }
+  async function clearPriceFilter(back) {
+    await fetch("/settings/price/clear", { method: "POST" });
+    location.href = back;
+  }
+</script>
