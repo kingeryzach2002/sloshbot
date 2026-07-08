@@ -522,10 +522,14 @@
   .ta-card a, .ta-card button { cursor: pointer; }
   .ta-meta { margin-top: 8px; white-space: nowrap; overflow: hidden;
              text-overflow: ellipsis; max-width: 100%; }
+  /* the verbal booze read: secondary to the coupe fill, never competes
+     with the title — same quiet tier as the rest of the dateline */
+  .ta-read { color: var(--muted); }
   .ta-why { margin: 12px 0 4px; white-space: nowrap; overflow: hidden;
             text-overflow: ellipsis; max-width: 100%; }
   .ta-foot { margin-top: 16px; }
   .ta-stamp-row { margin-top: 12px; padding-top: 12px; }
+  .ta-raw { color: var(--faint); }
 
   /* expanded state: full meta + the booze rationale */
   .ta-more { max-height: 0; overflow: hidden; opacity: 0;
@@ -621,6 +625,16 @@
     return mon + " " + day;
   }
 
+  // wry-bartender read of the booze score — six bands, no gaps, 0..100
+  function boozeRead(n) {
+    if (n >= 90) return "basically an open bar";
+    if (n >= 75) return "probably";
+    if (n >= 60) return "good odds";
+    if (n >= 40) return "coin flip";
+    if (n >= 20) return "bring your own";
+    return "bone dry";
+  }
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
@@ -695,8 +709,10 @@
     const tierClass = confident ? "confident" : (e.booze < 25 ? "maybe low" : "maybe");
     const dim = confident ? "" : "dim";
     const venue = cleanVenue(e.venue_name);
-    // collapsed: just time · venue, very quiet
-    const metaShort = [fmtTime(e.starts_at), venue ? escapeHtml(venue) : null]
+    const read = boozeRead(e.booze);
+    // collapsed: time · verbal read · venue — quiet, secondary to the coupe fill.
+    // Raw % never shows here; it lives in the coupe tooltip and the drawer.
+    const metaShort = [fmtTime(e.starts_at), `<span class="ta-read">${read}</span>`, venue ? escapeHtml(venue) : null]
       .filter(Boolean).join(" &middot; ");
     // expanded: the whole dateline
     const fullParts = [
@@ -716,7 +732,7 @@
     return `<article class="ta-card ${tierClass} enter" data-id="${escapeHtml(e.id)}">
       <div class="ta-top">
         <span class="ta-title"><a href="#">${escapeHtml(e.title)}</a></span>
-        <span class="coupe ${dim}" style="--p:${e.booze}" title="booze ${e.booze}% likely">
+        <span class="coupe ${dim}" style="--p:${e.booze}" title="${read} (${e.booze}%)">
           <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
         </span>
       </div>
@@ -724,12 +740,12 @@
       <p class="ta-why" title="${blurb}">${blurb}</p>
       <div class="ta-more"><div class="ta-more-inner">
         <div class="ta-meta-full">${metaFull}</div>
-        <div class="ta-pour"><span class="q">why the pour</span>${rationale}</div>
+        <div class="ta-pour"><span class="q">why the pour</span>${rationale} <span class="ta-raw">&middot; ${e.booze}% by the numbers</span></div>
       </div></div>
       <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold">+ hold</button></div>
-      <div class="ta-stamp-row"><span class="q">was there booze?</span>
-        <button class="ta-stamp" data-stamp>booze</button>
-        <button class="ta-stamp miss" data-stamp="miss">no booze</button></div>
+      <div class="ta-stamp-row"><span class="q">any booze?</span>
+        <button class="ta-stamp" data-stamp>yep</button>
+        <button class="ta-stamp miss" data-stamp="miss">nope</button></div>
     </article>`;
   }
 
@@ -748,8 +764,8 @@
         <div class="coupe dim" style="--p:0">
           <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
         </div>
-        nothing above ${state.thresh}% this week &mdash; lower the pour
-        <small>or loosen the distance, free, tag, and source filters above.</small>
+        nothing worth pouring above ${state.thresh}% today
+        <small>ease up on the pour, the radius, or the guest list above.</small>
       </div>`;
       return;
     }
@@ -761,12 +777,12 @@
       const rest = dayEvents.filter(e => e.booze < state.thresh);
       const first = dayEvents[0];
       const n = dayEvents.length;
-      html += `<section class="day"><div class="dayhead"><span class="dow">${fmtDow(first.starts_at)}</span><span class="date">${fmtDate(first.starts_at)}</span><span class="cnt">${n} event${n === 1 ? "" : "s"}</span></div>`;
+      html += `<section class="day"><div class="dayhead"><span class="dow">${fmtDow(first.starts_at)}</span><span class="date">${fmtDate(first.starts_at)}</span><span class="cnt">${n} on tap</span></div>`;
       if (shown.length) {
         html += `<div class="stack">${shown.map(cardHtml).join("")}</div>`;
       }
       if (rest.length) {
-        html += `<details class="more"><summary>${rest.length} more &middot; lower confidence</summary><div class="stack">${rest.map(cardHtml).join("")}</div></details>`;
+        html += `<details class="more"><summary>${rest.length} more, less sure</summary><div class="stack">${rest.map(cardHtml).join("")}</div></details>`;
       }
       html += `</section>`;
     });
