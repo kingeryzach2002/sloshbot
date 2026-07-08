@@ -51,7 +51,7 @@ def main():
         conn.execute(_CACHE_DDL)
         todo = conn.execute(
             """SELECT id, address, venue_name FROM events
-               WHERE lat IS NULL AND source != 'dummy'
+               WHERE lat IS NULL
                  AND starts_at >= datetime('now', 'localtime')""").fetchall()
         print(f"{len(todo)} future events missing coordinates")
         done = failed = 0
