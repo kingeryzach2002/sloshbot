@@ -1,6 +1,6 @@
 {# Top filter bar — custom dropdowns (no native <select>), the single home for
    all filters across every view (Tonight/Week/Calendar/Map).
-   Expects: back, has_home, max_mi, tag_counts, included_tags,
+   Expects: back, has_home, max_mi, min_booze, tag_counts, included_tags,
    source_counts, included_sources, price_counts, price_filter. #}
 <style>
   .filterbar { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 22px; position: relative; z-index: 10; }
@@ -39,13 +39,28 @@
     <button type="button" class="fbtn {{ 'active' if max_mi }}" onclick="toggleDropdown(this)">
       distance{% if max_mi %} · &le;{{ max_mi | int }}mi{% endif %} <i class="care">&#9662;</i></button>
     <div class="fpanel">
-      <a class="fopt {{ 'on' if not max_mi }}" href="{{ back }}">any distance</a>
+      <a class="fopt {{ 'on' if not max_mi }}" href="{{ back }}{{ '?min_booze=' ~ min_booze if min_booze }}">any distance</a>
       {% for mi in [1, 2, 3, 5] %}
-        <a class="fopt {{ 'on' if max_mi == mi }}" href="{{ back }}?max_mi={{ mi }}">&le; {{ mi }} mi</a>
+        <a class="fopt {{ 'on' if max_mi == mi }}"
+           href="{{ back }}?max_mi={{ mi }}{{ '&min_booze=' ~ min_booze if min_booze }}">&le; {{ mi }} mi</a>
       {% endfor %}
     </div>
   </div>
   {% endif %}
+
+  <div class="fdrop">
+    <button type="button" class="fbtn {{ 'active' if min_booze }}" onclick="toggleDropdown(this)">
+      booze confidence{% if min_booze %} · &ge;{{ (min_booze * 100) | int }}%{% endif %} <i class="care">&#9662;</i></button>
+    <div class="fpanel">
+      <a class="fopt {{ 'on' if not min_booze }}" href="{{ back }}{{ '?max_mi=' ~ max_mi if max_mi }}"
+         title="show every event, including ones the booze scorer isn't confident about">any</a>
+      {% for pct in [50, 65, 80] %}
+        <a class="fopt {{ 'on' if min_booze == pct / 100 }}"
+           href="{{ back }}?min_booze={{ pct / 100 }}{{ '&max_mi=' ~ max_mi if max_mi }}"
+           title="hide events the booze scorer rates below {{ pct }}%">&ge; {{ pct }}%</a>
+      {% endfor %}
+    </div>
+  </div>
 
   {% if tag_counts %}
   <div class="fdrop">

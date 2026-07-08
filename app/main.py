@@ -125,7 +125,8 @@ def gcal_link(e: dict) -> str:
 
 
 def load_events(start: datetime, end: datetime,
-                max_mi: float | None = None) -> list[dict]:
+                max_mi: float | None = None,
+                min_booze: float | None = None) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
             """SELECT * FROM events WHERE starts_at >= ? AND starts_at < ?
@@ -178,6 +179,8 @@ def load_events(start: datetime, end: datetime,
         if inc_tags and e["tags"] and not (inc_tags & set(e["tags"])):
             continue  # tag filter is a hard filter; untagged events are never dropped by it
         e["scores"] = scores.get(e["id"], {})
+        if min_booze is not None and e["scores"].get("booze", 0) < min_booze:
+            continue  # confidence filter: unscored events count as 0, unlike the tag filter
         e["rationales"] = rationales.get(e["id"], {})
         e["composite"] = composite(e["scores"], weights)
         e["tier"] = tier(e["scores"], weights) if e["scores"] else "maybe"  # unscored -> maybe, never hidden
@@ -189,12 +192,21 @@ def load_events(start: datetime, end: datetime,
                        else e["start_dt"] + timedelta(hours=2))  # same default as gcal_link
         if e["tier"] != "hidden":
             events.append(e)
-    # Hard cap on the top tier: only the MAX_PICKS best composites stay
-    # "confident"; the overflow demotes to maybe. Scarcity is deliberate.
-    picks = sorted((e for e in events if e["tier"] == "confident"),
-                   key=lambda e: -e["composite"])
-    for e in picks[MAX_PICKS:]:
-        e["tier"] = "maybe"
+    # Hard cap on the top tier, per day: only the MAX_PICKS best composites
+    # each day stay "confident"; the overflow demotes to maybe. Scarcity is
+    # deliberate, but a week-wide cap let a handful of great days anywhere in
+    # the window crowd out every other day's picks — cap by day instead so
+    # every day gets its own shot, and re-run after filters so it stays
+    # filter-sensitive (a tighter distance/tag/booze filter can promote
+    # events that lost the day's competition before).
+    by_day: dict = defaultdict(list)
+    for e in events:
+        if e["tier"] == "confident":
+            by_day[e["start_dt"].date()].append(e)
+    for day_picks in by_day.values():
+        day_picks.sort(key=lambda e: -e["composite"])
+        for e in day_picks[MAX_PICKS:]:
+            e["tier"] = "maybe"
     events.sort(key=lambda e: (e["starts_at"], -e["composite"]))
     return events
 
@@ -273,10 +285,10 @@ def layout_day(events: list[dict]) -> list[dict]:
 
 
 @app.get("/calendar", response_class=HTMLResponse)
-def calendar(request: Request, max_mi: float | None = None):
+def calendar(request: Request, max_mi: float | None = None, min_booze: float | None = None):
     now = datetime.now()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    events = load_events(today, today + timedelta(days=7), max_mi)
+    events = load_events(today, today + timedelta(days=7), max_mi, min_booze)
     by_date = defaultdict(list)
     for e in events:
         by_date[e["start_dt"].date()].append(e)
@@ -304,6 +316,7 @@ def calendar(request: Request, max_mi: float | None = None):
         "now_pct": ((now_min - CAL_START_MIN) / CAL_SPAN * 100
                     if CAL_START_MIN <= now_min < CAL_END_MIN else None),
         "max_mi": max_mi,
+        "min_booze": min_booze,
         "has_home": home_coords(settings) is not None,
         "tag_counts": tag_counts(), "included_tags": included_tags(settings),
         "source_counts": source_counts(), "included_sources": included_sources(settings),
@@ -330,12 +343,13 @@ def pending_debrief() -> dict | None:
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, lens: str = "", max_mi: float | None = None):
+def home(request: Request, lens: str = "", max_mi: float | None = None,
+         min_booze: float | None = None):
     """Hero view: the single best move tonight under the active lens."""
     if lens not in LENSES:
         lens = LENSES[0]
     now = datetime.now()
-    events = load_events(now - timedelta(hours=1), now + timedelta(days=7), max_mi)
+    events = load_events(now - timedelta(hours=1), now + timedelta(days=7), max_mi, min_booze)
 
     settings = get_settings()
     rank_w = lens_weights(lens, WEIGHTS)
@@ -367,6 +381,7 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
         "n_later": len(later),
         "debrief": pending_debrief(),
         "max_mi": max_mi,
+        "min_booze": min_booze,
         "has_home": home_coords(settings) is not None,
         "included_tags": included_tags(settings),
         "tag_counts": tag_counts(),
@@ -380,14 +395,15 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
 
 
 @app.get("/week", response_class=HTMLResponse)
-def week(request: Request, max_mi: float | None = None):
+def week(request: Request, max_mi: float | None = None, min_booze: float | None = None):
     now = datetime.now()
-    events = load_events(now - timedelta(hours=3), now + timedelta(days=7), max_mi)
+    events = load_events(now - timedelta(hours=3), now + timedelta(days=7), max_mi, min_booze)
     settings = get_settings()
     return templates.TemplateResponse(request, "week.html", {
         "days": group_by_day(events),
         "view": "week",
         "max_mi": max_mi,
+        "min_booze": min_booze,
         "has_home": home_coords(settings) is not None,
         "weights": WEIGHTS,
         "n_confident": sum(1 for e in events if e["tier"] == "confident"),

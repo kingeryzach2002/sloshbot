@@ -19,6 +19,9 @@
   .cal-head .num { display: block; font-size: 18px; color: var(--text);
                    font-weight: 650; letter-spacing: 0; text-transform: none; }
   .cal-head.today .num { color: var(--gold); }
+  .cal-head .more { display: block; font-size: 9.5px; color: var(--faint);
+                     text-transform: none; letter-spacing: 0; margin-top: 1px; }
+  .cal-cap { color: var(--faint); font-size: 12px; margin: 0 0 14px; }
   .gutter { border-right: 1px solid var(--line); }
   .gutter .hour { height: var(--hour-h); font-size: 10.5px; color: var(--muted);
                   text-align: right; padding-right: 6px; transform: translateY(-7px); }
@@ -62,12 +65,14 @@
 
   {% set back = '/calendar' %}
   {% include "_filterbar.html" %}
+  <p class="cal-cap">Showing each day's top {{ cap }} by match — lower matches are hidden, not deleted.</p>
 
   <div class="cal">
     <div class="cal-head"></div>
     {% for d in days %}
       <div class="cal-head {{ 'today' if d.is_today else '' }}">
         {{ d.label }}<span class="num">{{ d.num }}</span>
+        {% if d.hidden %}<span class="more">+{{ d.hidden }} more</span>{% endif %}
       </div>
     {% endfor %}
 
