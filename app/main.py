@@ -22,12 +22,14 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
 from app import data, filters, policy, presenter
 from app.auth import (RedirectToLogin, authenticate, create_user,
                       login_redirect_handler, require_user_api, require_user_html)
+from app.filters import FilterState
 from app.models import Event
 from db import get_conn, init_db
 from ingest.geocode import geocode
@@ -61,15 +63,35 @@ templates.env.globals["feedback_pairs"] = FEEDBACK_PAIRS
 init_db()
 
 
+def resolve_filters(user_id: str, f: str | None, tags: str | None, sources: str | None,
+                    price: str | None, max_mi: float | None,
+                    min_booze: float | None) -> FilterState:
+    """Resolve the active FilterState for a request.
+
+    Sentinel rule: if `f` is present, filter state comes ONLY from the URL
+    (from_query) — an absent filter param means that filter is OFF even if the
+    user has saved defaults. If `f` is absent, the user's saved defaults apply
+    (from_settings) — except max_mi/min_booze, which are overridden by the
+    query params when explicitly provided (legacy URL compatibility)."""
+    if f is not None:
+        return filters.from_query(tags, sources, price, max_mi, min_booze)
+    settings = data.get_settings(user_id)
+    fs = filters.from_settings(settings)
+    if max_mi is not None:
+        fs.max_mi = max_mi
+    if min_booze is not None:
+        fs.min_booze = min_booze
+    return fs
+
+
 def load_events(user_id: str, start: datetime, end: datetime,
-                max_mi: float | None = None,
-                min_booze: float | None = None) -> list[Event]:
+                fs: FilterState) -> list[Event]:
     """The read pipeline: fetch -> enrich -> filter -> rank. Returns tiered,
     capped, sorted events (hidden-tier already dropped)."""
     events = data.fetch_events(start, end, user_id)
     settings = data.get_settings(user_id)
     presenter.enrich(events, settings)          # start/end dt, distance, gcal
-    events = filters.apply(events, settings, max_mi, min_booze)
+    events = filters.apply(events, fs)
     return policy.rank(events)                  # composite/tier, demote, cap, sort
 
 
@@ -134,11 +156,14 @@ def logout(request: Request):
 
 
 @app.get("/calendar", response_class=HTMLResponse)
-def calendar(request: Request, max_mi: float | None = None, min_booze: float | None = None,
-            user_id: str = Depends(require_user_html)):
+def calendar(request: Request, f: str | None = None, tags: str | None = None,
+            sources: str | None = None, price: str | None = None,
+            max_mi: float | None = None, min_booze: float | None = None,
+            partial: int | None = None, user_id: str = Depends(require_user_html)):
+    fs = resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)
     now = datetime.now()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    events = load_events(user_id, today, today + timedelta(days=7), max_mi, min_booze)
+    events = load_events(user_id, today, today + timedelta(days=7), fs)
     by_date = defaultdict(list)
     for e in events:
         by_date[e["start_dt"].date()].append(e)
@@ -159,7 +184,7 @@ def calendar(request: Request, max_mi: float | None = None, min_booze: float | N
     now_min = now.hour * 60 + now.minute
     settings = data.get_settings(user_id)
     counts = _chip_counts_now(user_id)
-    return templates.TemplateResponse(request, "calendar.html", {
+    ctx = {
         "days": days,
         "no_events": not any(d["blocks"] or d["hidden"] for d in days),
         "view": "calendar",
@@ -167,14 +192,17 @@ def calendar(request: Request, max_mi: float | None = None, min_booze: float | N
         "cap": presenter.CAL_MAX_PER_DAY,
         "now_pct": ((now_min - presenter.CAL_START_MIN) / presenter.CAL_SPAN * 100
                     if presenter.CAL_START_MIN <= now_min < presenter.CAL_END_MIN else None),
-        "max_mi": max_mi,
-        "min_booze": min_booze,
+        "max_mi": fs.max_mi,
+        "min_booze": fs.min_booze,
         "has_home": presenter.home_coords(settings) is not None,
-        "tag_counts": counts["tags"], "included_tags": filters.included_tags(settings),
-        "source_counts": counts["sources"], "included_sources": filters.included_sources(settings),
-        "price_filter": filters.price_filter(settings), "price_counts": counts["price"],
+        "tag_counts": counts["tags"], "included_tags": fs.tags,
+        "source_counts": counts["sources"], "included_sources": fs.sources,
+        "price_filter": fs.price, "price_counts": counts["price"],
         "warming_up": is_warming_up(),
-    })
+        "active_filters": fs.to_dict(),
+    }
+    template_name = "_main_calendar.html" if partial else "calendar.html"
+    return templates.TemplateResponse(request, template_name, ctx)
 
 
 def pending_debrief(user_id: str) -> dict | None:
@@ -199,13 +227,16 @@ def pending_debrief(user_id: str) -> dict | None:
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, lens: str = "", max_mi: float | None = None,
-         min_booze: float | None = None, user_id: str = Depends(require_user_html)):
+def home(request: Request, lens: str = "", f: str | None = None, tags: str | None = None,
+         sources: str | None = None, price: str | None = None,
+         max_mi: float | None = None, min_booze: float | None = None,
+         partial: int | None = None, user_id: str = Depends(require_user_html)):
     """Hero view: the single best move tonight under the active lens."""
     if lens not in LENSES:
         lens = LENSES[0]
+    fs = resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)
     now = datetime.now()
-    events = load_events(user_id, now - timedelta(hours=1), now + timedelta(days=7), max_mi, min_booze)
+    events = load_events(user_id, now - timedelta(hours=1), now + timedelta(days=7), fs)
 
     settings = data.get_settings(user_id)
     # Single lens ("booze"), so match is just the composite (booze) score.
@@ -229,7 +260,7 @@ def home(request: Request, lens: str = "", max_mi: float | None = None,
     later = [e for e in events if e is not hero and (not tonight_evts or e["start_dt"].date() != today)]
 
     counts = _chip_counts_now(user_id)
-    return templates.TemplateResponse(request, "home.html", {
+    ctx = {
         "view": "tonight",
         "lens": lens, "lenses": LENSES,
         "hero": hero, "hero_label": hero_label,
@@ -237,40 +268,49 @@ def home(request: Request, lens: str = "", max_mi: float | None = None,
         "later_days": presenter.group_by_day(later),
         "n_later": len(later),
         "debrief": pending_debrief(user_id),
-        "max_mi": max_mi,
-        "min_booze": min_booze,
+        "max_mi": fs.max_mi,
+        "min_booze": fs.min_booze,
         "has_home": presenter.home_coords(settings) is not None,
-        "included_tags": filters.included_tags(settings),
+        "included_tags": fs.tags,
         "tag_counts": counts["tags"],
-        "included_sources": filters.included_sources(settings),
+        "included_sources": fs.sources,
         "source_counts": counts["sources"],
-        "price_filter": filters.price_filter(settings),
+        "price_filter": fs.price,
         "price_counts": counts["price"],
         "weights": WEIGHTS,
         "warming_up": is_warming_up(),
-    })
+        "active_filters": fs.to_dict(),
+    }
+    template_name = "_main_home.html" if partial else "home.html"
+    return templates.TemplateResponse(request, template_name, ctx)
 
 
 @app.get("/week", response_class=HTMLResponse)
-def week(request: Request, max_mi: float | None = None, min_booze: float | None = None,
-        user_id: str = Depends(require_user_html)):
+def week(request: Request, f: str | None = None, tags: str | None = None,
+        sources: str | None = None, price: str | None = None,
+        max_mi: float | None = None, min_booze: float | None = None,
+        partial: int | None = None, user_id: str = Depends(require_user_html)):
+    fs = resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)
     now = datetime.now()
-    events = load_events(user_id, now - timedelta(hours=3), now + timedelta(days=7), max_mi, min_booze)
+    events = load_events(user_id, now - timedelta(hours=3), now + timedelta(days=7), fs)
     settings = data.get_settings(user_id)
     counts = _chip_counts_now(user_id)
-    return templates.TemplateResponse(request, "week.html", {
+    ctx = {
         "days": presenter.group_by_day(events),
         "view": "week",
-        "max_mi": max_mi,
-        "min_booze": min_booze,
+        "max_mi": fs.max_mi,
+        "min_booze": fs.min_booze,
         "has_home": presenter.home_coords(settings) is not None,
         "weights": WEIGHTS,
         "n_confident": sum(1 for e in events if e["tier"] == "confident"),
-        "tag_counts": counts["tags"], "included_tags": filters.included_tags(settings),
-        "source_counts": counts["sources"], "included_sources": filters.included_sources(settings),
-        "price_filter": filters.price_filter(settings), "price_counts": counts["price"],
+        "tag_counts": counts["tags"], "included_tags": fs.tags,
+        "source_counts": counts["sources"], "included_sources": fs.sources,
+        "price_filter": fs.price, "price_counts": counts["price"],
         "warming_up": is_warming_up(),
-    })
+        "active_filters": fs.to_dict(),
+    }
+    template_name = "_main_week.html" if partial else "week.html"
+    return templates.TemplateResponse(request, template_name, ctx)
 
 
 @app.get("/tonight")
@@ -279,10 +319,13 @@ def tonight():
 
 
 @app.get("/map", response_class=HTMLResponse)
-def map_view(request: Request, max_mi: float | None = None,
+def map_view(request: Request, f: str | None = None, tags: str | None = None,
+            sources: str | None = None, price: str | None = None,
+            max_mi: float | None = None, min_booze: float | None = None,
             user_id: str = Depends(require_user_html)):
+    fs = resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)
     now = datetime.now()
-    events = load_events(user_id, now - timedelta(hours=3), now + timedelta(days=7), max_mi)
+    events = load_events(user_id, now - timedelta(hours=3), now + timedelta(days=7), fs)
     settings = data.get_settings(user_id)
     home = presenter.home_coords(settings)
     pins = [{
@@ -299,12 +342,13 @@ def map_view(request: Request, max_mi: float | None = None,
         "pins": pins,
         "home": {"lat": home[0], "lon": home[1]} if home else None,
         "home_address": settings.get("home_address", ""),
-        "max_mi": max_mi,
+        "max_mi": fs.max_mi,
         "has_home": home is not None,
         "n_unmapped": sum(1 for e in events if e["lat"] is None),
-        "tag_counts": counts["tags"], "included_tags": filters.included_tags(settings),
-        "source_counts": counts["sources"], "included_sources": filters.included_sources(settings),
-        "price_filter": filters.price_filter(settings), "price_counts": counts["price"],
+        "tag_counts": counts["tags"], "included_tags": fs.tags,
+        "source_counts": counts["sources"], "included_sources": fs.sources,
+        "price_filter": fs.price, "price_counts": counts["price"],
+        "active_filters": fs.to_dict(),
     })
 
 
@@ -312,10 +356,13 @@ def map_view(request: Request, max_mi: float | None = None,
 # returns Event.to_dict() so a future client-rendered frontend needs no new
 # backend logic — just these endpoints. ---
 @app.get("/api/events")
-def api_events(days: int = 7, max_mi: float | None = None, min_booze: float | None = None,
+def api_events(days: int = 7, f: str | None = None, tags: str | None = None,
+               sources: str | None = None, price: str | None = None,
+               max_mi: float | None = None, min_booze: float | None = None,
                user_id: str = Depends(require_user_api)):
+    fs = resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)
     now = datetime.now()
-    events = load_events(user_id, now - timedelta(hours=1), now + timedelta(days=days), max_mi, min_booze)
+    events = load_events(user_id, now - timedelta(hours=1), now + timedelta(days=days), fs)
     return {"events": [e.to_dict() for e in events]}
 
 
@@ -324,75 +371,32 @@ def api_counts(user_id: str = Depends(require_user_api)):
     return _chip_counts_now(user_id)
 
 
-@app.post("/settings/tags/toggle")
-def toggle_tag_filter(tag: str, user_id: str = Depends(require_user_api)):
-    """One-tap tag filtering: clicking a tag chip anywhere flips it in/out of
-    the included_tags setting."""
+class FilterSettingsBody(BaseModel):
+    tags: list[str] = []
+    sources: list[str] = []
+    price: str = ""
+    max_mi: float | None = None
+    min_booze: float | None = None
+
+
+@app.post("/settings/filters")
+def save_filter_settings(body: FilterSettingsBody, user_id: str = Depends(require_user_api)):
+    """Persist the user's sticky filter defaults. Empty list/string/null for a
+    field deletes that settings key; a non-empty value upserts it."""
+    values = {
+        "included_tags": ",".join(t for t in body.tags if t),
+        "included_sources": ",".join(s for s in body.sources if s),
+        "price_filter": body.price if body.price in ("free", "paid") else "",
+        "max_mi": str(body.max_mi) if body.max_mi is not None else "",
+        "min_booze": str(body.min_booze) if body.min_booze is not None else "",
+    }
     with get_conn() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE user_id = ? AND key = 'included_tags'",
-                           (user_id,)).fetchone()
-        current = [t for t in (row["value"] if row else "").split(",") if t]
-        if tag in current:
-            current.remove(tag)
-            state = "off"
-        else:
-            current.append(tag)
-            state = "on"
-        conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'included_tags', ?)",
-                     (user_id, ",".join(current)))
-    return {"ok": True, "state": state}
-
-
-@app.post("/settings/tags/clear")
-def clear_tag_filter(user_id: str = Depends(require_user_api)):
-    with get_conn() as conn:
-        conn.execute("DELETE FROM settings WHERE user_id = ? AND key = 'included_tags'", (user_id,))
-    return {"ok": True}
-
-
-@app.post("/settings/sources/toggle")
-def toggle_source_filter(source: str, user_id: str = Depends(require_user_api)):
-    """One-tap source filtering: mute a noisy scraper without hiding everything."""
-    with get_conn() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE user_id = ? AND key = 'included_sources'",
-                           (user_id,)).fetchone()
-        current = [s for s in (row["value"] if row else "").split(",") if s]
-        if source in current:
-            current.remove(source)
-            state = "off"
-        else:
-            current.append(source)
-            state = "on"
-        conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'included_sources', ?)",
-                     (user_id, ",".join(current)))
-    return {"ok": True, "state": state}
-
-
-@app.post("/settings/sources/clear")
-def clear_source_filter(user_id: str = Depends(require_user_api)):
-    with get_conn() as conn:
-        conn.execute("DELETE FROM settings WHERE user_id = ? AND key = 'included_sources'", (user_id,))
-    return {"ok": True}
-
-
-@app.post("/settings/price/toggle")
-def toggle_price_filter(value: str, user_id: str = Depends(require_user_api)):
-    """Single-select free/paid filter: picking the active value clears it."""
-    assert value in ("free", "paid")
-    with get_conn() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE user_id = ? AND key = 'price_filter'",
-                           (user_id,)).fetchone()
-        current = row["value"] if row else ""
-        new = "" if current == value else value
-        conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'price_filter', ?)",
-                     (user_id, new))
-    return {"ok": True, "state": "on" if new else "off"}
-
-
-@app.post("/settings/price/clear")
-def clear_price_filter(user_id: str = Depends(require_user_api)):
-    with get_conn() as conn:
-        conn.execute("DELETE FROM settings WHERE user_id = ? AND key = 'price_filter'", (user_id,))
+        for key, value in values.items():
+            if value:
+                conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, ?, ?)",
+                             (user_id, key, value))
+            else:
+                conn.execute("DELETE FROM settings WHERE user_id = ? AND key = ?", (user_id, key))
     return {"ok": True}
 
 

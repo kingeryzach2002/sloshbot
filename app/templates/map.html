@@ -40,7 +40,6 @@
     </form>
   </header>
 
-  {% set back = '/map' %}
   <div class="barrow">
     {% include "_filterbar.html" %}
     <form class="home" method="post" action="/settings/home">
@@ -67,16 +66,49 @@
     ? { radius: 9, color: "#e8b34b", fillColor: "#e8b34b", fillOpacity: 0.85, weight: 2 }
     : { radius: 6, color: "#a39a8e", fillColor: "#6b6258", fillOpacity: 0.6, weight: 1 };
 
-  for (const p of pins) {
-    L.circleMarker([p.lat, p.lon], style(p.tier)).addTo(map).bindPopup(`
-      <div class="pop">
-        <b>${p.title}</b><br>
-        <span class="m">${p.when} · ${p.venue}${p.distance !== null ? ` · ${p.distance} mi from home` : ""}</span><br>
-        <span class="m">🍸 ${p.booze}% free-booze likelihood</span><br>
-        <a href="${p.url}" target="_blank">event page</a> ·
-        <a href="${p.gcal}" target="_blank">+ hold on calendar</a>
-      </div>`);
+  const pinLayer = L.layerGroup().addTo(map);
+
+  function redrawPins(pinList) {
+    pinLayer.clearLayers();
+    for (const p of pinList) {
+      L.circleMarker([p.lat, p.lon], style(p.tier)).addTo(pinLayer).bindPopup(`
+        <div class="pop">
+          <b>${p.title}</b><br>
+          <span class="m">${p.when} · ${p.venue}${p.distance !== null ? ` · ${p.distance} mi from home` : ""}</span><br>
+          <span class="m">🍸 ${p.booze}% free-booze likelihood</span><br>
+          <a href="${p.url}" target="_blank">event page</a> ·
+          <a href="${p.gcal}" target="_blank">+ hold on calendar</a>
+        </div>`);
+    }
   }
+
+  function fmtWhen(iso) {
+    const d = new Date(iso);
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let h = d.getHours();
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return `${days[d.getDay()]} ${h}:${min} ${ampm}`;
+  }
+
+  function eventToPin(e) {
+    return {
+      lat: e.lat, lon: e.lon, title: e.title, tier: e.tier, url: e.url, gcal: e.gcal,
+      when: fmtWhen(e.start_dt),
+      venue: e.venue_name || "",
+      booze: Math.round((e.scores.booze || 0) * 100),
+      distance: e.distance_mi != null ? Math.round(e.distance_mi * 10) / 10 : null,
+    };
+  }
+
+  window.applyPageUpdate = async (qs) => {
+    const r = await fetch("/api/events?" + qs);
+    const { events } = await r.json();
+    redrawPins(events.filter(e => e.lat != null).map(eventToPin));
+  };
+
+  redrawPins(pins);
 
   if (home) {
     L.marker([home.lat, home.lon]).addTo(map).bindPopup("<b>home</b>");

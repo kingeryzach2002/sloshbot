@@ -38,27 +38,9 @@
     </form>
   </header>
 
-  {% set back = '/week' %}
   {% include "_filterbar.html" %}
-  <p class="sub">{{ n_confident }} confident pick{{ '' if n_confident == 1 else 's' }} in the next 7 days</p>
 
-  {% if not days %}
-    {% include "_empty.html" %}
-  {% endif %}
-
-  {% for day, events in days %}
-    <h2 class="day">{% if day == 'Tonight' %}<span class="pulse"></span>{% endif %}{%
-      if '·' in day %}{{ day.split('·')[0] }}<span class="d">·{{ day.split('·')[1] }}</span>{% else %}{{ day }}{% endif %}</h2>
-    {% set confident = events | selectattr('tier', 'equalto', 'confident') | list %}
-    {% set maybe = events | rejectattr('tier', 'equalto', 'confident') | list %}
-    {% for e in confident %}{% include "_card.html" %}{% endfor %}
-    {% if maybe %}
-      <details class="maybe-section" {{ 'open' if not confident else '' }}>
-        <summary>{{ maybe | length }} more, lower confidence</summary>
-        {% for e in maybe %}{% include "_card.html" %}{% endfor %}
-      </details>
-    {% endif %}
-  {% endfor %}
+  <div id="page-main">{% include "_main_week.html" %}</div>
 
   <details class="explain">
     <summary>how scoring works</summary>

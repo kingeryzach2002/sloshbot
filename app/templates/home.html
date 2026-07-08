@@ -70,86 +70,9 @@
     </form>
   </header>
 
-  {% set back = '/' %}
   {% include "_filterbar.html" %}
 
-  {% if debrief %}
-  <div class="debrief" id="debrief">
-    <a class="dismiss" href="javascript:document.getElementById('debrief').remove()">dismiss</a>
-    <div class="t">{{ debrief.when }}: {{ debrief.title }}</div>
-    <div class="q">did you go?</div>
-    <button class="btn" data-verdict="went" onclick="fb(this, '{{ debrief.event_id }}', 'went', '')">went</button>
-    <button class="btn" data-verdict="skipped" onclick="fb(this, '{{ debrief.event_id }}', 'skipped', '')">skipped</button>
-    <div class="q">was the {{ debrief.lens }} as promised?</div>
-    <button class="btn" data-verdict="as_promised" onclick="fb(this, '{{ debrief.event_id }}', 'as_promised', '{{ debrief.lens }}')">as promised</button>
-    <button class="btn" data-verdict="not_as_promised" onclick="fb(this, '{{ debrief.event_id }}', 'not_as_promised', '{{ debrief.lens }}')">not as promised</button>
-  </div>
-  {% endif %}
-
-  {% if not hero %}
-    {% set empty_scope = ' this week' %}
-    {% include "_empty.html" %}
-  {% else %}
-  <div class="hero">
-    <div class="label"><span class="pulse"></span>{{ hero_label }}</div>
-    <span class="arc lg" style="--p: {{ (hero.match * 100) | round | int }}"
-          title="match {{ (hero.match * 100) | round | int }}"></span>
-    <div class="title"><a href="{{ hero.url }}" target="_blank">{{ hero.title }}</a></div>
-    <div class="meta">
-      {{ hero.start_dt.strftime("%-I:%M") }}–{{ hero.end_dt.strftime("%-I:%M %p") }}
-      · {{ hero.venue_name or "venue TBA" }}{% if hero.neighborhood %} ({{ hero.neighborhood }}){% endif %}
-      {% if hero.distance_mi is not none %} · {{ "%.1f" | format(hero.distance_mi) }} mi{% endif %}
-      {% if hero.host_name %} · by {{ hero.host_name }}{% endif %}
-      {% if hero.host_rep %} · <span class="rep {{ 'good' if hero.host_rep.miss == 0 else 'bad' }}">host
-        {{ hero.host_rep.ok }}/{{ hero.host_rep.ok + hero.host_rep.miss }} as promised</span>{% endif %}
-      {% if hero.rsvp_type and hero.rsvp_type != 'open' %} · <span class="rsvp">{{ hero.rsvp_type }}</span>{% endif %}
-    </div>
-    {% if hero.rationales.get(lens) %}
-      <div class="why">{{ m.meter(lens, hero.scores.get(lens, 0)) }}
-        — {{ hero.rationales.get(lens) }}</div>
-    {% endif %}
-    {% if hero.tags %}
-      <div class="tags">{% for t in hero.tags %}<span class="tag {{ 'on' if t in included_tags | default([]) }}"
-        onclick="toggleTag('{{ t }}')" title="filter to this tag">{{ t }}</span>{% endfor %}</div>
-    {% endif %}
-    <div class="actions">
-      <button class="btn primary" onclick="hold(this, '{{ hero.id }}', '{{ hero.gcal }}', '{{ lens }}')">+ hold on calendar</button>
-    </div>
-  </div>
-
-  {% if backups %}
-  <details class="section">
-    <summary>or… {{ backups | length }} backup{{ '' if backups|length == 1 else 's' }} tonight</summary>
-    {% for e in backups %}
-      <details class="crow">
-        <summary><span class="n">{{ e.title }}</span>
-          <span class="w">{{ e.start_dt.strftime("%-I:%M %p") }}</span>
-          <span class="m"><span class="arc dim" style="--p: {{ (e.match * 100) | round | int }}"
-            title="match {{ (e.match * 100) | round | int }}"></span></span></summary>
-        {% include "_card.html" %}
-      </details>
-    {% endfor %}
-  </details>
-  {% endif %}
-
-  {% if n_later %}
-  <details class="section">
-    <summary>everything else this week ({{ n_later }})</summary>
-    {% for day, evts in later_days %}
-      <h3 class="dayhead">{{ day }}</h3>
-      {% for e in evts %}
-        <details class="crow">
-          <summary><span class="n">{{ e.title }}</span>
-            <span class="w">{{ e.start_dt.strftime("%-I:%M %p") }}</span>
-            <span class="m"><span class="arc dim" style="--p: {{ (e.match * 100) | round | int }}"
-              title="match {{ (e.match * 100) | round | int }}"></span></span></summary>
-          {% include "_card.html" %}
-        </details>
-      {% endfor %}
-    {% endfor %}
-  </details>
-  {% endif %}
-  {% endif %}
+  <div id="page-main">{% include "_main_home.html" %}</div>
 </div>
 {% include "_feedback.html" %}
 </body>

@@ -67,49 +67,9 @@
     </form>
   </header>
 
-  {% set back = '/calendar' %}
   {% include "_filterbar.html" %}
 
-  {% if no_events %}
-    {% include "_empty.html" %}
-  {% else %}
-  <p class="cal-cap">Showing each day's top {{ cap }} by match — lower matches are hidden, not deleted.</p>
-
-  <div class="cal">
-    <div class="cal-head"></div>
-    {% for d in days %}
-      <div class="cal-head {{ 'today' if d.is_today else '' }}">
-        {{ d.label }}<span class="num">{{ d.num }}</span>
-        {% if d.hidden %}<span class="more">+{{ d.hidden }} more</span>{% endif %}
-      </div>
-    {% endfor %}
-
-    <div class="gutter">
-      {% for h in hours %}
-        <div class="hour">{{ h % 12 or 12 }}{{ 'am' if h < 12 else 'pm' }}</div>
-      {% endfor %}
-    </div>
-    {% for d in days %}
-      <div class="col {{ 'today' if d.is_today else '' }}">
-        {% for b in d.blocks %}
-          <a class="evt {{ b.e.tier }}" href="{{ b.e.url }}" target="_blank"
-             style="top: {{ '%.3f' % b.top }}%; height: {{ '%.3f' % b.height }}%;
-                    left: {{ '%.3f' % b.left }}%; width: calc({{ '%.3f' % b.width }}% - 2px);"
-             title="{{ b.e.title }} · {{ b.e.start_dt.strftime('%-I:%M %p') }}–{{ b.e.end_dt.strftime('%-I:%M %p') }} · {{ b.e.venue_name or 'venue TBA' }}">
-            <span class="t">{{ b.e.title }}</span>
-            <span class="when">{{ b.e.start_dt.strftime('%-I:%M') }}–{{ b.e.end_dt.strftime('%-I:%M %p') }}</span>
-            {% if b.e.tags %}
-              <span class="tags">{% for t in b.e.tags %}<span class="tag">{{ t }}</span>{% endfor %}</span>
-            {% endif %}
-          </a>
-        {% endfor %}
-        {% if d.is_today and now_pct is not none %}
-          <div class="now-line" style="top: {{ '%.3f' % now_pct }}%;"></div>
-        {% endif %}
-      </div>
-    {% endfor %}
-  </div>
-  {% endif %}
+  <div id="page-main">{% include "_main_calendar.html" %}</div>
 </div>
 </body>
 </html>

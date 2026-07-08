@@ -1,6 +1,6 @@
-"""Filter layer: pure predicates over (events, settings). The ONE definition of
-which events are visible, and the ONE place chip counts are computed (so a chip
-can never advertise a count that doesn't show up). No DB, no ranking.
+"""Filter layer: pure predicates over (events, FilterState). The ONE definition
+of which events are visible, and the ONE place chip counts are computed (so a
+chip can never advertise a count that doesn't show up). No DB, no ranking.
 
 Replaces, from the old app/main.py:
   - the hard-filter block inside load_events (main.py:196-209): source, price,
@@ -10,21 +10,35 @@ Replaces, from the old app/main.py:
   - the settings parsers included_tags/included_sources/price_filter (main.py:37-49).
 
 CONTRACT
-  included_tags(settings)   -> list[str]     # comma split of settings["included_tags"], drop empties
-  included_sources(settings)-> list[str]     # same for "included_sources"
-  price_filter(settings)    -> str           # "free"|"paid"|"" (anything else -> "")
+  FilterState(tags, sources, price, max_mi, min_booze)
+      The resolved, view-agnostic filter selection. `tags`/`sources` are
+      lists[str], `price` is "free"|"paid"|"", `max_mi`/`min_booze` are
+      float|None. `.to_dict()` renders it JSON-serializable for the
+      `active_filters` template context key.
 
-  apply(events, settings, max_mi=None, min_booze=None) -> list[Event]
+  from_settings(settings: dict) -> FilterState
+      Parses a user's sticky-default settings row into a FilterState:
+        - included_tags/included_sources: comma split, drop empties.
+        - price_filter: "free"|"paid" else "".
+        - max_mi/min_booze: float parse, None on missing/garbage.
+      This is the ONE place settings-shape knowledge lives.
+
+  from_query(tags, sources, price, max_mi, min_booze) -> FilterState
+      Same parsing rules as from_settings, but from raw query-string values
+      (tags/sources are comma-separated strings, price is a raw string,
+      max_mi/min_booze are already-parsed float|None from FastAPI).
+
+  apply(events, fs: FilterState) -> list[Event]
       Keep an event iff it passes ALL of these hard filters (order-independent):
-        - source:   if included_sources set, keep only events whose source is in it.
-        - price:    if price_filter set, keep only is_free==(1 if "free" else 0);
+        - source:   if fs.sources set, keep only events whose source is in it.
+        - price:    if fs.price set, keep only is_free==(1 if "free" else 0);
                     unknown is_free (None) matches NEITHER free nor paid.
         - max_mi:   if given, drop events with distance_mi is not None and > max_mi;
                     events with distance_mi is None are NEVER dropped by it.
                     (distance_mi must already be set by presenter.enrich.)
-        - tag:      if included_tags set, drop an event only if it HAS tags and none
-                    of them intersect included_tags; untagged events are never dropped.
-        - min_booze:if given, drop events whose scores.get("booze", 0) < min_booze
+        - tag:      if fs.tags set, drop an event only if it HAS tags and none
+                    of them intersect fs.tags; untagged events are never dropped.
+        - min_booze:if given, drop events whose scores.get("booze", 0) < fs.min_booze
                     (unscored counts as 0 here — unlike the tag filter).
       Returns a new list; does not mutate or reorder beyond dropping.
 
@@ -40,31 +54,73 @@ CONTRACT
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass, field
 
 from app.models import Event
 from scoring.weights import TIER_MAYBE
 
 
-def included_tags(settings: dict) -> list[str]:
-    raw = settings.get("included_tags", "")
+@dataclass
+class FilterState:
+    tags: list[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
+    price: str = ""
+    max_mi: float | None = None
+    min_booze: float | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "tags": self.tags,
+            "sources": self.sources,
+            "price": self.price,
+            "max_mi": self.max_mi,
+            "min_booze": self.min_booze,
+        }
+
+
+def _split_csv(raw: str) -> list[str]:
     return [t for t in raw.split(",") if t]
 
 
-def included_sources(settings: dict) -> list[str]:
-    raw = settings.get("included_sources", "")
-    return [s for s in raw.split(",") if s]
+def _parse_price(raw: str) -> str:
+    return raw if raw in ("free", "paid") else ""
 
 
-def price_filter(settings: dict) -> str:
-    v = settings.get("price_filter", "")
-    return v if v in ("free", "paid") else ""
+def _parse_float(raw) -> float | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
 
 
-def apply(events: list[Event], settings: dict,
-          max_mi: float | None = None, min_booze: float | None = None) -> list[Event]:
-    inc_tags = set(included_tags(settings))
-    inc_sources = set(included_sources(settings))
-    price = price_filter(settings)
+def from_settings(settings: dict) -> FilterState:
+    """The ONE place settings-shape knowledge lives."""
+    return FilterState(
+        tags=_split_csv(settings.get("included_tags", "")),
+        sources=_split_csv(settings.get("included_sources", "")),
+        price=_parse_price(settings.get("price_filter", "")),
+        max_mi=_parse_float(settings.get("max_mi")),
+        min_booze=_parse_float(settings.get("min_booze")),
+    )
+
+
+def from_query(tags: str | None, sources: str | None, price: str | None,
+               max_mi: float | None, min_booze: float | None) -> FilterState:
+    return FilterState(
+        tags=_split_csv(tags or ""),
+        sources=_split_csv(sources or ""),
+        price=_parse_price(price or ""),
+        max_mi=_parse_float(max_mi),
+        min_booze=_parse_float(min_booze),
+    )
+
+
+def apply(events: list[Event], fs: FilterState) -> list[Event]:
+    inc_tags = set(fs.tags)
+    inc_sources = set(fs.sources)
+    price = fs.price
 
     out = []
     for e in events:
@@ -72,11 +128,11 @@ def apply(events: list[Event], settings: dict,
             continue  # source filter is a hard filter — every event has a source
         if price and e.is_free != (1 if price == "free" else 0):
             continue  # unknown is_free matches neither free nor paid
-        if max_mi is not None and e.distance_mi is not None and e.distance_mi > max_mi:
+        if fs.max_mi is not None and e.distance_mi is not None and e.distance_mi > fs.max_mi:
             continue  # events with unknown location are never dropped by the filter
         if inc_tags and e.tags and not (inc_tags & set(e.tags)):
             continue  # tag filter is a hard filter; untagged events are never dropped by it
-        if min_booze is not None and e.scores.get("booze", 0) < min_booze:
+        if fs.min_booze is not None and e.scores.get("booze", 0) < fs.min_booze:
             continue  # confidence filter: unscored events count as 0, unlike the tag filter
         out.append(e)
     return out
