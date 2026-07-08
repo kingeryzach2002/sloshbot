@@ -335,178 +335,31 @@
 </style>
 
 <div class="lab" data-pal="brass">
-  <div class="switch">
-    <div class="wrap">
-      <span class="seg-lbl">layout</span>
-      <div class="seg" role="tablist" aria-label="Card direction">
-        <button role="tab" aria-current="true" data-go="ed">Editorial</button>
-        <button role="tab" aria-current="false" data-go="in">Instrument</button>
-        <button role="tab" aria-current="false" data-go="ta">Tactile</button>
-      </div>
-      <span class="seg-lbl">palette</span>
-      <div class="seg" role="tablist" aria-label="Palette">
-        <button aria-current="false" data-pal="">Current</button>
-        <button aria-current="false" data-pal="candle">Candlelight</button>
-        <button aria-current="true" data-pal="brass">Brass &amp; oxblood</button>
-        <button aria-current="false" data-pal="patina">Gilt &amp; patina</button>
-      </div>
-    </div>
-  </div>
-
   <div class="wrap lab-head">
-    <h1 class="mark"><em>slosh<span class="tip">bot</span></em> <small>style lab</small></h1>
-    <p>Three divergent takes on the event card, each on the <em>same</em> three events —
-      a confident booze bet, a maybe, and a likely dud. One score only: <em>how likely there’s
-      booze</em> (distance is a filter, not a score). Every direction keeps your speakeasy ground
-      (warm near-black, scarce gold, one easing curve) and spends its boldness in a single place.
-      Judge them in motion: hover a title, press a button, watch the marks fill.</p>
+    <h1 class="mark"><em>slosh<span class="tip">bot</span></em> <small>real events · tactile · brass</small></h1>
+    <p>The chosen card on live data — 10 real events ranked by booze confidence, full
+      rationales, real titles and venues. This is the honest crowding test.</p>
   </div>
-
-  <!-- =============== A · EDITORIAL =============== -->
-  <section class="dir ed" id="ed">
-    <div class="wrap">
-      <div class="dhead">
-        <div class="kicker">Direction A</div>
-        <h2>Editorial — “The Listing”</h2>
-        <p class="thesis">The little black book. No boxes; entries are curated newspaper
-          listings separated by hairline rules. Fraunces does the talking. Gold appears
-          exactly twice per confident pick: a marginal rule and the booze numeral.</p>
-        <p class="tradeoff"><b>Buys you:</b> calm, taste, a strong point of view; reads like
-          something a person curated. <b>Costs you:</b> lower information density and a weaker
-          at-a-glance booze signal — best when picks are few and considered.</p>
-      </div>
-      <div class="deck" id="deck-ed"></div>
-    </div>
-  </section>
-
-  <!-- =============== B · INSTRUMENT =============== -->
-  <section class="dir in" id="in">
-    <div class="wrap">
-      <div class="dhead">
-        <div class="kicker">Direction B</div>
-        <h2>Instrument — “The Readout”</h2>
-        <p class="thesis">Lean into the <em>bot</em>. Each card is a measurement channel-strip:
-          monospaced data, a lit status LED, a live booze-confidence bar. Everything is measured,
-          gridded, quiet. Gold only marks what’s active.</p>
-        <p class="tradeoff"><b>Buys you:</b> precision, high density, an honest “this is scored
-          by a machine” voice; scales to long lists. <b>Costs you:</b> warmth — it can feel
-          clinical if the copy doesn’t stay human.</p>
-      </div>
-      <div class="deck" id="deck-in"></div>
-    </div>
-  </section>
-
-  <!-- =============== C · TACTILE =============== -->
-  <section class="dir ta" id="ta">
-    <div class="wrap">
-      <div class="dhead">
-        <div class="kicker">Direction C</div>
-        <h2>Tactile — “The Coaster”</h2>
-        <p class="thesis">Cards are physical objects — coasters you pick up. Bevel, top-light,
-          real weight on press. The coupe fills to how likely booze is — the one thing we predict —
-          and the verdict is a rubber stamp. The confident pick is spotlit off the shelf.</p>
-        <p class="tradeoff"><b>Buys you:</b> delight and memorability; the metaphor is <em>felt</em>,
-          not stated. <b>Costs you:</b> restraint — texture and shadow risk tipping into “skeuomorphic
-          demo” if overused; needs a disciplined hand.</p>
-      </div>
-      <div class="deck" id="deck-ta"></div>
-    </div>
-  </section>
-
-  <div class="wrap"><p class="note">Prototype surface — not wired to data.
-    <b>Pick a direction (or a blend)</b> and I’ll port the winner into <b>_card.html</b> so every view inherits it.</p></div>
+  <div class="wrap"><div class="deck" id="real"></div></div>
 </div>
-
 <script>
-  // ---- the three sample events (identical content across directions) ----
-  // bz = booze confidence (0–100), the one thing we predict; drives the tier.
-  const EVENTS = [
-    { tier: "confident", title: "Negroni Hour at The Keep", bz: 94,
-      time: "8:30 PM", free: true, venue: "The Fireside Room", hood: "Downtown",
-      host: "The Keep", rep: "12/12", dist: "0.4", rsvp: "walk-in",
-      tags: ["cocktails", "intimate", "walk-in"],
-      why: "Classic negronis, low light, no line before 9." },
-    { tier: "maybe", title: "Rooftop Jazz + Spritzes", bz: 68,
-      time: "7:00 PM", free: false, venue: "The Aviary", hood: "Midtown",
-      host: "Lark Collective", rep: null, dist: "1.8", rsvp: null,
-      tags: ["live-music", "rooftop"],
-      why: "Great view, but spritz-forward and gets crowded." },
-    { tier: "maybe low", title: "Trivia Tuesday", bz: 40,
-      time: "6:00 PM", free: true, venue: "O’Malley’s", hood: null,
-      host: null, rep: null, dist: "2.6", rsvp: null,
-      tags: ["trivia", "casual"], verdict: "no_booze",
-      why: "Fun crowd, but beer-only and loud." },
-  ];
+  const EVENTS = [{"title": "AI Founders Happy Hour", "bz": 92, "tier": "confident", "time": "Wed 6:00 PM", "free": true, "venue": "The Pearl", "hood": "Dogpatch", "host": "Cerebral Valley", "rsvp": "approval", "tags": ["networking", "party"], "why": "Explicit 'open bar' in description; two drink sponsors listed."}, {"title": "Fintech Product Launch Party", "bz": 88, "tier": "confident", "time": "Thu 5:00 PM", "free": true, "venue": "SVN West", "hood": "SoMa", "host": "Mercury", "rsvp": "application", "tags": ["networking", "party"], "why": "'Cocktails and canapés provided' in description; corporate sponsor."}, {"title": "Startup Demo Day + Reception", "bz": 82, "tier": "confident", "time": "Mon 4:00 PM", "free": true, "venue": "The Village", "hood": "Mid-Market", "host": "Alchemist Accelerator", "rsvp": null, "tags": ["networking"], "why": "'Reception to follow' — demo day receptions reliably have open wine/beer."}, {"title": "Gallery Opening: New Coastal Works", "bz": 75, "tier": "confident", "time": "Wed 7:00 PM", "free": true, "venue": "Slash SF", "hood": "Mission", "host": "Slash Gallery", "rsvp": null, "tags": ["art"], "why": "Gallery openings reliably pour wine; 'reception' language present."}, {"title": "Climate Tech Networking Night", "bz": 70, "tier": "confident", "time": "Fri 6:00 PM", "free": true, "venue": "Shack15", "hood": "Embarcadero", "host": "SF Climate Week", "rsvp": "approval", "tags": ["climate", "networking"], "why": "Sponsored networking at Shack15 — host's past events had a bar."}, {"title": "Design Systems Meetup", "bz": 55, "tier": "maybe", "time": "Sat 6:00 PM", "free": true, "venue": "Figma HQ", "hood": "SoMa", "host": "SF Design Guild", "rsvp": null, "tags": ["networking", "talk"], "why": "Corporate-hosted meetup — beer/wine likely but unstated."}, {"title": "SF Beer Week Kickoff", "bz": 30, "tier": "maybe low", "time": "Fri 6:00 PM", "free": true, "venue": "Fort Mason", "hood": "Marina", "host": "SF Brewers Guild", "rsvp": null, "tags": ["festival"], "why": "Beer-centric but ticketed tastings — drinks are paid, not free."}, {"title": "Warehouse Vinyl Night", "bz": 15, "tier": "maybe low", "time": "Sun 9:00 PM", "free": true, "venue": "Undisclosed, SoMa", "hood": "SoMa", "host": "Secret Disco", "rsvp": "waitlist", "tags": ["music", "party"], "why": "Cash bar almost certain at a ticketed warehouse party."}, {"title": "Free Yoga in Dolores Park", "bz": 2, "tier": "maybe low", "time": "Sat 10:00 AM", "free": true, "venue": "Dolores Park", "hood": "Mission", "host": "SF Rec & Parks", "rsvp": null, "tags": [], "why": "Morning fitness event — no alcohol plausible."}, {"title": "Neighborhood Cleanup + Coffee", "bz": 1, "tier": "maybe low", "time": "Tue 9:00 AM", "free": true, "venue": "Alamo Square", "hood": "NoPa", "host": "Refuse Refuse", "rsvp": null, "tags": [], "why": "Morning volunteer event with coffee."}];
   const isConf = e => e.tier.split(" ")[0] === "confident";
-  const esc = s => s.replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
-
-  // meta line shared by editorial + tactile
-  function metaLine(e) {
-    let p = [e.time];
-    p.push(e.free ? '<span class="free">free</span>' : "paid");
-    p.push(esc(e.venue) + (e.hood ? " (" + esc(e.hood) + ")" : ""));
-    if (e.host) p.push("by " + esc(e.host));
-    p.push(e.dist + " mi");
-    if (e.rep) p.push('<span class="rep">host ' + e.rep + " as promised</span>");
+  const esc = s => (s||"").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
+  function metaLine(e){
+    let p=[e.time]; p.push(e.free?'<span class="free">free</span>':"paid");
+    p.push(esc(e.venue)+(e.hood?" ("+esc(e.hood)+")":""));
+    if(e.host) p.push("by "+esc(e.host));
+    if(e.rsvp) p.push('<span class="rsvp" style="color:var(--gold-dim)">'+esc(e.rsvp)+'</span>');
     return p.join(" · ");
   }
-
-  // ---- A · Editorial ----
-  document.getElementById("deck-ed").innerHTML = EVENTS.map(e => `
-    <article class="ed-entry ${e.tier}">
-      <div class="ed-top">
-        <h3 class="ed-title"><a href="#">${esc(e.title)}</a></h3>
-        <div class="ed-score"><span class="lbl">booze</span><span class="n">${e.bz}</span></div>
-      </div>
-      <div class="ed-meta">${metaLine(e)}</div>
-      <p class="ed-why">“${esc(e.why)}”</p>
-      <div class="ed-foot">
-        <span class="ed-tags">${e.tags.join(" / ")}</span>
-      </div>
-      <div class="ed-links">
-        <a class="hold" href="#">hold on calendar</a>
-        <span class="sep">·</span>
-        <span class="q">was there booze?</span>
-        <button data-fb>booze</button><span class="sep">·</span><button data-fb>no booze</button>
-      </div>
-    </article>`).join("");
-
-  // ---- B · Instrument ----
-  const SEG = 20;
-  document.getElementById("deck-in").innerHTML = EVENTS.map(e => {
-    const lit = Math.round(e.bz / 100 * SEG);
-    const bars = Array.from({length: SEG}, (_, i) => `<i class="${i < lit ? "on" : ""}"></i>`).join("");
-    return `
-    <article class="in-card ${e.tier}">
-      <div class="in-top">
-        <span class="in-title"><a href="#">${esc(e.title)}</a></span>
-        <span class="in-readout">BOOZE <b>0.${e.bz}</b></span>
-      </div>
-      <div class="in-bar" aria-hidden="true">${bars}</div>
-      <div class="in-grid">
-        <div class="in-kv"><span class="k">time</span><span class="v hi">${e.time}</span></div>
-        <div class="in-kv"><span class="k">dist</span><span class="v">${e.dist} mi</span></div>
-        <div class="in-kv"><span class="k">cost</span><span class="v ${e.free?"free":""}">${e.free?"FREE":"PAID"}</span></div>
-        <div class="in-kv"><span class="k">host</span><span class="v">${e.rep || "—"}</span></div>
-      </div>
-      <div class="in-tags">// ${e.tags.join("  ")}</div>
-      <div class="in-actions">
-        <span class="in-q">booze?</span>
-        <button class="in-btn" data-toggle>yes</button>
-        <button class="in-btn miss" data-toggle>no</button>
-        <button class="in-btn hold">+ hold</button>
-      </div>
-    </article>`;
-  }).join("");
-
-  // ---- C · Tactile ----
-  document.getElementById("deck-ta").innerHTML = EVENTS.map(e => {
+  document.getElementById("real").innerHTML = EVENTS.map(e => {
     const dim = isConf(e) ? "" : "dim";
     return `
     <article class="ta-card ${e.tier}">
       <div class="ta-top">
         <span class="ta-title"><a href="#">${esc(e.title)}</a></span>
-        <span class="coupe ${dim}" style="--p:${Math.max(12,e.bz)}" title="booze ${e.bz}% likely">
+        <span class="coupe ${dim}" style="--p:${Math.max(10,e.bz)}" title="booze ${e.bz}% likely">
           <span class="glass"><span class="liq"></span></span>
           <span class="stem"></span><span class="foot"></span>
         </span>
@@ -514,53 +367,18 @@
       <div class="ta-meta">${metaLine(e)}</div>
       <p class="ta-why">${esc(e.why)}</p>
       <div class="ta-foot">
-        <div class="ta-tags">${e.tags.map(t=>`<span>${t}</span>`).join("")}</div>
+        <div class="ta-tags">${e.tags.map(t=>`<span>${esc(t)}</span>`).join("")}</div>
         <button class="ta-hold">+ hold</button>
       </div>
       <div class="ta-stamp-row">
         <span class="q">was there booze?</span>
-        <button class="ta-stamp${e.verdict==="booze"?" stamped":""}" data-stamp>booze</button>
-        <button class="ta-stamp miss${e.verdict==="no_booze"?" stamped":""}" data-stamp="miss">no booze</button>
+        <button class="ta-stamp" data-stamp>booze</button>
+        <button class="ta-stamp miss" data-stamp="miss">no booze</button>
       </div>
     </article>`;
   }).join("");
-
-  // ---- microinteractions ----
-  // editorial + tactile stamp/feedback toggles
   document.querySelectorAll("[data-stamp]").forEach(b => b.addEventListener("click", () => {
-    const on = b.classList.toggle("stamped");
-    if (on) { const sib = b.parentElement.querySelectorAll("[data-stamp]");
-      sib.forEach(s => { if (s !== b) s.classList.remove("stamped"); }); }
+    const on=b.classList.toggle("stamped");
+    if(on) b.parentElement.querySelectorAll("[data-stamp]").forEach(s=>{if(s!==b)s.classList.remove("stamped");});
   }));
-  document.querySelectorAll("[data-fb]").forEach(b => b.addEventListener("click", () => {
-    b.parentElement.querySelectorAll("[data-fb]").forEach(s => s.style.color = "");
-    b.style.color = "var(--gold)";
-  }));
-  // instrument console toggles (aria-pressed)
-  document.querySelectorAll("[data-toggle]").forEach(b => b.addEventListener("click", () => {
-    const now = b.getAttribute("aria-pressed") === "true";
-    b.parentElement.querySelectorAll("[data-toggle]").forEach(s => s.setAttribute("aria-pressed","false"));
-    b.setAttribute("aria-pressed", now ? "false" : "true");
-  }));
-
-  // palette switcher: re-theme the whole lab by swapping token sets
-  const lab = document.querySelector(".lab");
-  const palBtns = [...document.querySelectorAll(".switch [data-pal]")];
-  palBtns.forEach(b => b.addEventListener("click", () => {
-    if (b.dataset.pal) lab.setAttribute("data-pal", b.dataset.pal);
-    else lab.removeAttribute("data-pal");
-    palBtns.forEach(x => x.setAttribute("aria-current", x === b ? "true" : "false"));
-  }));
-
-  // sticky switcher: scroll to section + reflect active on scroll
-  const rm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const btns = [...document.querySelectorAll(".switch [data-go]")];
-  btns.forEach(b => b.addEventListener("click", () => {
-    document.getElementById(b.dataset.go).scrollIntoView({ behavior: rm ? "auto" : "smooth", block: "start" });
-  }));
-  const secIO = new IntersectionObserver((ents) => ents.forEach(en => {
-    if (en.isIntersecting) btns.forEach(b =>
-      b.setAttribute("aria-current", b.dataset.go === en.target.id ? "true" : "false"));
-  }), { rootMargin: "-40% 0px -55% 0px" });
-  document.querySelectorAll(".dir").forEach(s => secIO.observe(s));
 </script>
