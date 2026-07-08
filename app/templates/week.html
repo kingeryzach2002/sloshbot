@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sloshbot</title>
+<style>
+  :root {
+    --bg: #12100e; --card: #1c1917; --card2: #211d1a; --text: #ece7e0;
+    --muted: #a39a8e; --line: #322c26; --gold: #e8b34b; --gold-dim: #8a6a2a;
+    --green: #7fb069; --red: #c96f5e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 80px; }
+  header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.02em; }
+  h1 .tip { color: var(--gold); }
+  nav a { color: var(--muted); text-decoration: none; margin-right: 12px;
+          padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); }
+  nav a.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: 600; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+  .chips { display: flex; gap: 8px; align-items: center; margin: 4px 0 6px; flex-wrap: wrap; }
+  .chip { background: var(--card2); border: 1px solid var(--line); color: var(--text);
+          border-radius: 99px; padding: 4px 12px; font-size: 13px; cursor: pointer;
+          list-style: none; display: inline-block; }
+  details.tunepop { position: relative; }
+  details.tunepop summary::-webkit-details-marker { display: none; }
+  details.tunepop[open] summary.chip { border-color: var(--gold); }
+  .pop { position: absolute; z-index: 30; top: 36px; left: 0; background: var(--card);
+         border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+         display: flex; flex-direction: column; gap: 10px; width: 240px;
+         box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+  .pop label { font-size: 12.5px; color: var(--muted); display: flex;
+               flex-direction: column; gap: 3px; }
+  .pop label span { color: var(--gold); float: right; }
+  .pop input[type=range] { accent-color: var(--gold); width: 100%; }
+  .pop.tagpop { width: 220px; max-height: 280px; overflow-y: auto; }
+  .tagcheck { flex-direction: row !important; align-items: center; gap: 6px !important;
+              font-size: 13px; color: var(--text); }
+  .tagcheck input { accent-color: var(--gold); }
+  .pop button { background: var(--gold); border: none; color: var(--bg); font-weight: 650;
+                border-radius: 8px; padding: 6px; cursor: pointer; }
+  h2.day { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em;
+           color: var(--muted); border-bottom: 1px solid var(--line);
+           padding-bottom: 6px; margin: 28px 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+          padding: 14px 16px; margin-bottom: 10px; }
+  .card.confident { border-color: var(--gold-dim); }
+  .card.maybe { opacity: 0.85; }
+  .row1 { display: flex; align-items: baseline; gap: 10px; }
+  .title { font-weight: 650; font-size: 16px; }
+  .title a { color: var(--text); text-decoration: none; }
+  .title a:hover { color: var(--gold); }
+  .badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
+           text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+  .badge.confident { background: var(--gold); color: var(--bg); }
+  .badge.maybe { background: var(--card2); color: var(--muted); border: 1px solid var(--line); }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .meta .rsvp { color: var(--gold); }
+  .rep.good { color: var(--green); }
+  .rep.bad { color: var(--red); }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .tag { font-size: 11px; padding: 1px 8px; border-radius: 99px;
+         border: 1px solid var(--line); background: var(--card2); color: var(--muted); }
+  .why { margin: 8px 0 0; padding: 8px 10px; background: var(--card2);
+         border-radius: 8px; font-size: 13px; color: var(--muted); }
+  .why b { color: var(--text); font-weight: 600; }
+  .whyline { margin-top: 8px; font-size: 13px; color: var(--muted);
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .whyline b { color: var(--text); }
+  details.why-more summary { cursor: pointer; font-size: 12px; color: var(--muted);
+                             margin-top: 4px; }
+  details.why-more summary:hover { color: var(--gold); }
+  .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .btn { font-size: 12.5px; padding: 5px 12px; border-radius: 8px; cursor: pointer;
+         border: 1px solid var(--line); background: var(--card2); color: var(--text);
+         text-decoration: none; }
+  .btn.primary { background: var(--gold); border-color: var(--gold); color: var(--bg); font-weight: 650; }
+  .btn.done { background: var(--green); border-color: var(--green); color: var(--bg); }
+  .btn:hover { border-color: var(--gold-dim); }
+  details.maybe-section summary { cursor: pointer; color: var(--muted); font-size: 13px;
+    text-transform: uppercase; letter-spacing: 0.08em; margin: 10px 0; }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+  details.explain { margin-top: 36px; }
+  details.explain summary { cursor: pointer; color: var(--muted); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>slosh<span class="tip">bot</span></h1>
+    <nav>
+      <a href="/">Tonight</a>
+      <a href="/week" class="{{ 'active' if view == 'week' else '' }}">This week</a>
+      <a href="/calendar">Calendar</a>
+      <a href="/map">Map</a>
+    </nav>
+  </header>
+
+  {% set back = '/week' %}
+  <div class="chips">
+    <form method="post" action="/settings/tune">
+      <input type="hidden" name="back" value="{{ back }}">
+      <select class="chip" name="preset" onchange="this.form.submit()">
+        {% for p in presets %}<option value="{{ p }}" {{ 'selected' if preset == p }}>{{ p }}</option>{% endfor %}
+        {% if preset == 'custom' %}<option value="custom" selected>⚙ custom</option>{% endif %}
+      </select>
+    </form>
+    {% if has_home %}
+    <select class="chip" onchange="location.href='{{ back }}' + (this.value ? '?max_mi=' + this.value : '')">
+      <option value="">any distance</option>
+      {% for mi in [1, 2, 3, 5] %}
+        <option value="{{ mi }}" {{ 'selected' if max_mi == mi else '' }}>within {{ mi }} mi</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <details class="tunepop">
+      <summary class="chip">tune ⚙</summary>
+      <form class="pop" method="post" action="/settings/tune">
+        <input type="hidden" name="preset" value="custom">
+        <input type="hidden" name="back" value="{{ back }}">
+        <label>🍸 booze <span>{{ weights.booze }}</span>
+          <input type="range" name="weight_booze" min="0" max="1" step="0.05" value="{{ weights.booze }}"
+                 oninput="this.previousElementSibling.textContent = this.value"></label>
+        <label>logistics <span>{{ weights.logistics }}</span>
+          <input type="range" name="weight_logistics" min="0" max="1" step="0.05" value="{{ weights.logistics }}"
+                 oninput="this.previousElementSibling.textContent = this.value"></label>
+        <button type="submit">apply</button>
+      </form>
+    </details>
+    {% if all_tags %}
+    <details class="tunepop">
+      <summary class="chip">tags{{ ' (' ~ included_tags|length ~ ')' if included_tags else '' }}</summary>
+      <form class="pop tagpop" method="post" action="/settings/tags">
+        <input type="hidden" name="back" value="{{ back }}">
+        {% for t in all_tags %}
+          <label class="tagcheck">
+            <input type="checkbox" name="tags" value="{{ t }}" {{ 'checked' if t in included_tags else '' }}>
+            {{ t }}
+          </label>
+        {% endfor %}
+        <button type="submit">apply</button>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+  <p class="sub">{{ n_confident }} confident pick{{ '' if n_confident == 1 else 's' }}
+    {{ 'in the next 7 days' if view == 'week' else 'tonight & tomorrow' }}</p>
+
+  {% if not days %}<p class="empty">Nothing on the radar. Run the ingest pipeline.</p>{% endif %}
+
+  {% for day, events in days %}
+    <h2 class="day">{{ day }}</h2>
+    {% set confident = events | selectattr('tier', 'equalto', 'confident') | list %}
+    {% set maybe = events | rejectattr('tier', 'equalto', 'confident') | list %}
+    {% for e in confident %}{% include "_card.html" %}{% endfor %}
+    {% if maybe %}
+      <details class="maybe-section" {{ 'open' if not confident else '' }}>
+        <summary>{{ maybe | length }} maybe{{ '' if maybe|length == 1 else 's' }}</summary>
+        {% for e in maybe %}{% include "_card.html" %}{% endfor %}
+      </details>
+    {% endif %}
+  {% endfor %}
+
+  <details class="explain">
+    <summary>how scoring works</summary>
+    <div class="why">
+      Each event gets two independent scores (0–100), shown on every card:<br>
+      <b>🍸 booze</b> — an LLM reads the full event listing and estimates the
+      probability of free drinks, citing its evidence.<br>
+      <b>logistics</b> — starts at 50, then time-of-day, neighborhood, and RSVP
+      friction adjust it (e.g. +25 weeknight sweet spot, −30 waitlisted).<br><br>
+      Event-type preference isn't a score — it's the <b>tags</b> filter above.
+      Check the tags you're interested in and only matching events show up
+      (events with no tags at all are never hidden by it). No code to edit,
+      and it can change as often as your taste does.<br><br>
+      The badge's <b>match</b> number blends them:
+      {% for name, w in scoring_info.weights.items() %}{{ name }} ×{{ w }}{{ ", " if not loop.last }}{% endfor %}.
+      ≥{{ (scoring_info.confident * 100) | int }} ⇒ <b>confident</b>,
+      ≥{{ (scoring_info.maybe * 100) | int }} ⇒ <b>maybe</b>, below ⇒ hidden.
+      Weights and thresholds live in <code>scoring/weights.py</code>.
+    </div>
+  </details>
+</div>
+<script>
+  async function hold(btn, eventId, gcal, lens) {
+    fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
+    window.open(gcal, "_blank");
+    btn.classList.add("done");
+    btn.textContent = "held ✓";
+  }
+</script>
+</body>
+</html>

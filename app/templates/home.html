@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sloshbot</title>
+<style>
+  :root {
+    --bg: #12100e; --card: #1c1917; --card2: #211d1a; --text: #ece7e0;
+    --muted: #a39a8e; --line: #322c26; --gold: #e8b34b; --gold-dim: #8a6a2a;
+    --green: #7fb069; --red: #c96f5e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 80px; }
+  header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.02em; }
+  h1 .tip { color: var(--gold); }
+  nav a { color: var(--muted); text-decoration: none; margin-right: 12px;
+          padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); }
+  nav a.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: 600; }
+  .distsel { margin-left: auto; background: var(--card2); border: 1px solid var(--line);
+             color: var(--text); border-radius: 8px; padding: 4px 8px; font-size: 13px; }
+
+  .lensbar { display: flex; align-items: center; gap: 8px; margin: 16px 0 20px;
+             font-size: 13px; color: var(--muted); }
+  .lensbar a { color: var(--muted); text-decoration: none; padding: 2px 10px;
+               border-radius: 99px; border: 1px solid var(--line); }
+  .lensbar a.active { color: var(--bg); background: var(--text); border-color: var(--text); font-weight: 600; }
+
+  .debrief { background: var(--card2); border: 1px solid var(--gold-dim); border-radius: 12px;
+             padding: 14px 16px; margin-bottom: 20px; }
+  .debrief .q { color: var(--muted); font-size: 13px; margin: 8px 0 4px; }
+  .debrief .t { font-weight: 650; }
+  .debrief .dismiss { float: right; color: var(--muted); font-size: 12px; text-decoration: none; }
+
+  .hero { background: var(--card); border: 1px solid var(--gold-dim); border-radius: 16px;
+          padding: 22px 22px 20px; margin-bottom: 24px; }
+  .hero .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em;
+                 color: var(--gold); margin-bottom: 8px; }
+  .hero .title { font-size: 24px; font-weight: 700; line-height: 1.25; letter-spacing: -0.01em; }
+  .hero .title a { color: var(--text); text-decoration: none; }
+  .hero .title a:hover { color: var(--gold); }
+  .hero .meta { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .hero .match { float: right; font-size: 14px; font-weight: 700; color: var(--gold);
+                 border: 1px solid var(--gold-dim); border-radius: 99px; padding: 3px 12px; }
+  .hero .why { margin: 12px 0 0; padding: 10px 12px; background: var(--card2);
+               border-radius: 10px; font-size: 13.5px; color: var(--muted); }
+  .hero .why b { color: var(--text); }
+  .rep.good { color: var(--green); }
+  .rep.bad { color: var(--red); }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .tag { font-size: 11px; padding: 1px 8px; border-radius: 99px;
+         border: 1px solid var(--line); background: var(--card2); color: var(--muted); }
+  .btn { font-size: 13px; padding: 7px 14px; border-radius: 9px; cursor: pointer;
+         border: 1px solid var(--line); background: var(--card2); color: var(--text);
+         text-decoration: none; }
+  .btn.primary { background: var(--gold); border-color: var(--gold); color: var(--bg);
+                 font-weight: 650; font-size: 14px; }
+  .btn.done { background: var(--green); border-color: var(--green); color: var(--bg); }
+  .hero .actions { margin-top: 14px; }
+
+  details.section > summary { cursor: pointer; color: var(--muted); font-size: 13px;
+    text-transform: uppercase; letter-spacing: 0.08em; margin: 18px 0 10px; }
+  .crow { border-bottom: 1px solid var(--line); }
+  .crow > summary { cursor: pointer; list-style: none; display: flex; gap: 10px;
+                    align-items: baseline; padding: 8px 2px; font-size: 14px; }
+  .crow > summary::-webkit-details-marker { display: none; }
+  .crow .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crow .w { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .crow .m { color: var(--gold); font-size: 12.5px; font-weight: 650; width: 30px; text-align: right; }
+  .crow[open] { background: var(--card); border-radius: 10px; padding: 0 8px 8px; }
+  h3.dayhead { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.1em;
+               color: var(--muted); margin: 14px 0 2px; }
+  /* included _card.html styles */
+  .card { background: var(--card2); border: 1px solid var(--line); border-radius: 10px;
+          padding: 12px 14px; margin-top: 6px; }
+  .row1 { display: flex; align-items: baseline; gap: 10px; }
+  .title { font-weight: 650; font-size: 15px; }
+  .title a { color: var(--text); text-decoration: none; }
+  .badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
+           text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+  .badge.confident { background: var(--gold); color: var(--bg); }
+  .badge.maybe { background: var(--card); color: var(--muted); border: 1px solid var(--line); }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .meta .rsvp { color: var(--gold); }
+  .why { margin: 8px 0 0; padding: 8px 10px; background: var(--card);
+         border-radius: 8px; font-size: 13px; color: var(--muted); }
+  .why b { color: var(--text); font-weight: 600; }
+  .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .empty { color: var(--muted); padding: 60px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>slosh<span class="tip">bot</span></h1>
+    <nav>
+      <a href="/" class="active">Tonight</a>
+      <a href="/week">This week</a>
+      <a href="/calendar">Calendar</a>
+      <a href="/map">Map</a>
+    </nav>
+    {% if has_home %}
+    <select class="distsel" onchange="location.href='/?lens={{ lens }}' + (this.value ? '&max_mi=' + this.value : '')">
+      <option value="">any distance</option>
+      {% for mi in [1, 2, 3, 5] %}
+        <option value="{{ mi }}" {{ 'selected' if max_mi == mi else '' }}>within {{ mi }} mi</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+  </header>
+
+  <div class="lensbar">
+    ranking by:
+    {% for l in lenses %}
+      <a href="/?lens={{ l }}" class="{{ 'active' if l == lens else '' }}">{{ l }}</a>
+    {% endfor %}
+  </div>
+
+  {% if debrief %}
+  <div class="debrief" id="debrief">
+    <a class="dismiss" href="javascript:document.getElementById('debrief').remove()">dismiss</a>
+    <div class="t">{{ debrief.when }}: {{ debrief.title }}</div>
+    <div class="q">did you go?</div>
+    <button class="btn" data-verdict="went" onclick="fb(this, '{{ debrief.event_id }}', 'went', '')">went</button>
+    <button class="btn" data-verdict="skipped" onclick="fb(this, '{{ debrief.event_id }}', 'skipped', '')">skipped</button>
+    <div class="q">was the {{ debrief.lens }} as promised?</div>
+    <button class="btn" data-verdict="as_promised" onclick="fb(this, '{{ debrief.event_id }}', 'as_promised', '{{ debrief.lens }}')">as promised</button>
+    <button class="btn" data-verdict="not_as_promised" onclick="fb(this, '{{ debrief.event_id }}', 'not_as_promised', '{{ debrief.lens }}')">not as promised</button>
+  </div>
+  {% endif %}
+
+  {% if not hero %}
+    <p class="empty">Nothing on the radar this week. Run the ingest pipeline.</p>
+  {% else %}
+  <div class="hero">
+    <div class="label">{{ hero_label }}</div>
+    <span class="match">{{ (hero.match * 100) | round | int }}</span>
+    <div class="title"><a href="{{ hero.url }}" target="_blank">{{ hero.title }}</a></div>
+    <div class="meta">
+      {{ hero.start_dt.strftime("%-I:%M") }}–{{ hero.end_dt.strftime("%-I:%M %p") }}
+      · {{ hero.venue_name or "venue TBA" }}{% if hero.neighborhood %} ({{ hero.neighborhood }}){% endif %}
+      {% if hero.distance_mi is not none %} · {{ "%.1f" | format(hero.distance_mi) }} mi{% endif %}
+      {% if hero.host_name %} · by {{ hero.host_name }}{% endif %}
+      {% if hero.host_rep %} · <span class="rep {{ 'good' if hero.host_rep.miss == 0 else 'bad' }}">host
+        {{ hero.host_rep.ok }}/{{ hero.host_rep.ok + hero.host_rep.miss }} as promised</span>{% endif %}
+      {% if hero.rsvp_type and hero.rsvp_type != 'open' %} · <span class="rsvp">{{ hero.rsvp_type }}</span>{% endif %}
+    </div>
+    {% if hero.rationales.get(lens) %}
+      <div class="why"><b>{{ lens }} {{ (hero.scores.get(lens, 0) * 100) | round | int }}%</b>
+        — {{ hero.rationales.get(lens) }}</div>
+    {% endif %}
+    {% if hero.tags %}
+      <div class="tags">{% for t in hero.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
+    {% endif %}
+    <div class="actions">
+      <button class="btn primary" onclick="hold(this, '{{ hero.id }}', '{{ hero.gcal }}', '{{ lens }}')">+ hold on calendar</button>
+    </div>
+  </div>
+
+  {% if backups %}
+  <details class="section">
+    <summary>or… {{ backups | length }} backup{{ '' if backups|length == 1 else 's' }} tonight</summary>
+    {% for e in backups %}
+      <details class="crow">
+        <summary><span class="n">{{ e.title }}</span>
+          <span class="w">{{ e.start_dt.strftime("%-I:%M %p") }}</span>
+          <span class="m">{{ (e.match * 100) | round | int }}</span></summary>
+        {% include "_card.html" %}
+      </details>
+    {% endfor %}
+  </details>
+  {% endif %}
+
+  {% if n_later %}
+  <details class="section">
+    <summary>everything else this week ({{ n_later }})</summary>
+    {% for day, evts in later_days %}
+      <h3 class="dayhead">{{ day }}</h3>
+      {% for e in evts %}
+        <details class="crow">
+          <summary><span class="n">{{ e.title }}</span>
+            <span class="w">{{ e.start_dt.strftime("%-I:%M %p") }}</span>
+            <span class="m">{{ (e.match * 100) | round | int }}</span></summary>
+          {% include "_card.html" %}
+        </details>
+      {% endfor %}
+    {% endfor %}
+  </details>
+  {% endif %}
+  {% endif %}
+</div>
+<script>
+  const FB_PAIRS = { went: "skipped", skipped: "went",
+                     as_promised: "not_as_promised", not_as_promised: "as_promised" };
+  async function fb(btn, eventId, verdict, lens) {
+    const res = await fetch(`/feedback/${eventId}/${verdict}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
+    const { state } = await res.json();
+    btn.classList.toggle("done", state === "on");
+    if (state === "on") {
+      const other = btn.parentElement.querySelector(`[data-verdict="${FB_PAIRS[verdict]}"]`);
+      if (other) other.classList.remove("done");
+    }
+  }
+  async function hold(btn, eventId, gcal, lens) {
+    fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
+    window.open(gcal, "_blank");
+    btn.classList.add("done");
+    btn.textContent = "held ✓";
+  }
+</script>
+</body>
+</html>

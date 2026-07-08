@@ -1,0 +1,35 @@
+<div class="card {{ e.tier }}">
+  <div class="row1">
+    <span class="title"><a href="{{ e.url }}" target="_blank">{{ e.title }}</a></span>
+    <span class="badge {{ e.tier }}"
+          title="match = weighted blend: booze {{ (e.scores.booze * 100) | round | int if e.scores.booze is defined else '?' }}×{{ scoring_info.weights.booze }} + logistics {{ (e.scores.logistics * 100) | round | int if e.scores.logistics is defined else '?' }}×{{ scoring_info.weights.logistics }}"
+    >{{ e.tier }} · {{ (e.composite * 100) | round | int }} match</span>
+  </div>
+  <div class="meta">
+    {{ e.start_dt.strftime("%-I:%M %p") }}
+    · {{ e.venue_name or "venue TBA" }}{% if e.neighborhood %} ({{ e.neighborhood }}){% endif %}
+    {% if e.host_name %} · by {{ e.host_name }}{% endif %}
+    {% if e.rsvp_type and e.rsvp_type != 'open' %} · <span class="rsvp">{{ e.rsvp_type }}</span>{% endif %}
+    {% if e.distance_mi is not none %} · {{ "%.1f" | format(e.distance_mi) }} mi{% endif %}
+    {% if e.host_rep %} · <span class="rep {{ 'good' if e.host_rep.miss == 0 else 'bad' }}">host
+      {{ e.host_rep.ok }}/{{ e.host_rep.ok + e.host_rep.miss }} as promised</span>{% endif %}
+  </div>
+  {% if e.tags %}
+    <div class="tags">{% for t in e.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
+  {% endif %}
+  {% if e.rationales.booze %}
+    <div class="whyline"><b>🍸 {{ (e.scores.booze * 100) | round | int }}%</b> — {{ e.rationales.booze }}</div>
+  {% endif %}
+  {% if e.rationales %}
+    <details class="why-more">
+      <summary>why {{ (e.composite * 100) | round | int }} match?</summary>
+      <div class="why">
+        {% if e.rationales.booze %}<b>🍸 booze {{ (e.scores.booze * 100) | round | int }}%</b> — {{ e.rationales.booze }}{% endif %}
+        {% if e.rationales.logistics %}<br><b>logistics {{ (e.scores.logistics * 100) | round | int }}%</b> — {{ e.rationales.logistics }}{% endif %}
+      </div>
+    </details>
+  {% endif %}
+  <div class="actions">
+    <button class="btn primary" onclick="hold(this, '{{ e.id }}', '{{ e.gcal }}', '{{ lens | default('') }}')">+ hold on calendar</button>
+  </div>
+</div>

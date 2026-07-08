@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sloshbot — map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #12100e; --card: #1c1917; --card2: #211d1a; --text: #ece7e0;
+    --muted: #a39a8e; --line: #322c26; --gold: #e8b34b; --gold-dim: #8a6a2a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 -apple-system, "Segoe UI", sans-serif;
+         display: flex; flex-direction: column; height: 100vh; }
+  .bar { display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+         flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.02em; }
+  h1 .tip { color: var(--gold); }
+  nav a { color: var(--muted); text-decoration: none; margin-right: 8px;
+          padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); font-size: 13px; }
+  nav a.active { color: var(--bg); background: var(--gold); border-color: var(--gold); font-weight: 600; }
+  form.home { display: flex; gap: 6px; margin-left: auto; }
+  input[type=text] { background: var(--card2); border: 1px solid var(--line); color: var(--text);
+          border-radius: 8px; padding: 5px 10px; font-size: 13px; width: 260px; }
+  select { background: var(--card2); border: 1px solid var(--line); color: var(--text);
+           border-radius: 8px; padding: 5px 8px; font-size: 13px; }
+  button { background: var(--gold); border: none; color: var(--bg); font-weight: 650;
+           border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .note { color: var(--muted); font-size: 12px; padding: 4px 16px; }
+  #map { flex: 1; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--card); color: var(--text); }
+  .pop b { font-size: 14px; }
+  .pop .m { color: var(--muted); font-size: 12px; }
+  .pop a { color: var(--gold); }
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1>slosh<span class="tip">bot</span></h1>
+  <nav>
+    <a href="/">Tonight</a>
+    <a href="/week">This week</a>
+    <a href="/calendar">Calendar</a>
+    <a href="/map" class="active">Map</a>
+  </nav>
+  <select onchange="location.href='/map' + (this.value ? '?max_mi=' + this.value : '')">
+    <option value="">any distance</option>
+    {% for mi in [1, 2, 3, 5] %}
+      <option value="{{ mi }}" {{ 'selected' if max_mi == mi else '' }}>within {{ mi }} mi</option>
+    {% endfor %}
+  </select>
+  <form class="home" method="post" action="/settings/home">
+    <input type="text" name="home_address" placeholder="home address (for distances)"
+           value="{{ home_address }}">
+    <button type="submit">{{ 'Update home' if home_address else 'Set home' }}</button>
+  </form>
+</div>
+{% if n_unmapped %}<div class="note">{{ n_unmapped }} event(s) have no location and aren't shown —
+  run <code>uv run python -m ingest.geocode</code> to backfill.</div>{% endif %}
+{% if not home and max_mi %}<div class="note">Distance filter needs a home address set first.</div>{% endif %}
+<div id="map"></div>
+
+<script>
+  const pins = {{ pins | tojson }};
+  const home = {{ home | tojson }};
+
+  const map = L.map("map").setView(home ? [home.lat, home.lon] : [37.7749, -122.4194], 13);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19,
+  }).addTo(map);
+
+  const style = t => t === "confident"
+    ? { radius: 9, color: "#e8b34b", fillColor: "#e8b34b", fillOpacity: 0.85, weight: 2 }
+    : { radius: 6, color: "#a39a8e", fillColor: "#6b6258", fillOpacity: 0.6, weight: 1 };
+
+  for (const p of pins) {
+    L.circleMarker([p.lat, p.lon], style(p.tier)).addTo(map).bindPopup(`
+      <div class="pop">
+        <b>${p.title}</b><br>
+        <span class="m">${p.when} · ${p.venue}${p.distance !== null ? ` · ${p.distance} mi from home` : ""}</span><br>
+        <span class="m">🍸 ${p.booze}% free-booze likelihood</span><br>
+        <a href="${p.url}" target="_blank">event page</a> ·
+        <a href="${p.gcal}" target="_blank">+ hold on calendar</a>
+      </div>`);
+  }
+
+  if (home) {
+    L.marker([home.lat, home.lon]).addTo(map).bindPopup("<b>home</b>");
+    for (const mi of [1, 2, 3])
+      L.circle([home.lat, home.lon], { radius: mi * 1609.34, color: "#8a6a2a",
+        fill: false, weight: 1, opacity: 0.35, dashArray: "4 6" }).addTo(map);
+  }
+
+  if (pins.length) {
+    const pts = pins.map(p => [p.lat, p.lon]);
+    if (home) pts.push([home.lat, home.lon]);
+    map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 });
+  }
+</script>
+</body>
+</html>

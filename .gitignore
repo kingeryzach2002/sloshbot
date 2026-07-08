@@ -1,0 +1,15 @@
+# environment
+.venv/
+__pycache__/
+*.pyc
+
+# data — the DB is derived state, rebuildable from scraping
+sloshbot.db
+sloshbot.db-*
+
+# secrets
+.env
+
+# local junk
+.DS_Store
+.session-trace/
