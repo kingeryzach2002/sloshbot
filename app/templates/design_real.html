@@ -299,8 +299,6 @@
   .ta-why { font-family: var(--serif); font-style: italic; font-weight: 400;
             font-size: 15px; line-height: 1.42; color: var(--muted); margin: 10px 0 2px;
             max-width: 40ch; text-wrap: pretty; }
-  .ta-why::before { content: "\201C"; color: var(--gold-dim); margin-right: 0.5px; }
-  .ta-why::after { content: "\201D"; color: var(--gold-dim); }
   .ta-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
   .ta-tags { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; }
   .ta-tags span { font-size: 11px; color: var(--muted); background: var(--card2);
@@ -334,11 +332,15 @@
   .note b { color: var(--muted); font-style: normal; }
 </style>
 
+<style>
+  /* single wide column you scroll through — matches the app's 680px main column */
+  #real { grid-template-columns: 1fr; gap: 14px; max-width: 720px; margin: 0 auto; }
+</style>
 <div class="lab" data-pal="brass">
   <div class="wrap lab-head">
     <h1 class="mark"><em>slosh<span class="tip">bot</span></em> <small>real events · tactile · brass</small></h1>
-    <p>The chosen card on live data — 10 real events ranked by booze confidence, full
-      rationales, real titles and venues. This is the honest crowding test.</p>
+    <p>The chosen card on live data — 10 real events ranked by booze confidence, in a single
+      wide column you scroll through.</p>
   </div>
   <div class="wrap"><div class="deck" id="real"></div></div>
 </div>
