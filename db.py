@@ -4,9 +4,13 @@ import sqlite3
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-# SLOSHBOT_DB overrides the location (e.g. a persistent disk on a host);
-# otherwise the DB lives beside the code.
-DB_PATH = Path(os.environ.get("SLOSHBOT_DB") or ROOT / "sloshbot.db")
+# SLOSHBOT_DB overrides the location explicitly (e.g. a persistent disk on a
+# host). Otherwise, if OPENHOST_APP_DATA_DIR is set (OpenHost's persistent
+# per-app data mount — the repo checkout itself is ephemeral there), the DB
+# lives inside it. Otherwise it lives beside the code (local dev).
+_data_dir = os.environ.get("OPENHOST_APP_DATA_DIR")
+DB_PATH = Path(os.environ.get("SLOSHBOT_DB")
+               or (Path(_data_dir) / "sloshbot.db" if _data_dir else ROOT / "sloshbot.db"))
 SCHEMA_PATH = ROOT / "ingest" / "schema.sql"
 
 

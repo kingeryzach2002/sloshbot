@@ -31,10 +31,16 @@ COPY . .
 # IMPORTANT: the database is NOT baked into the image. Deploys replace the
 # container wholesale, so any state stored inside it (i.e. the default
 # sloshbot.db-beside-the-code path in db.py) would be discarded on every
-# deploy. SLOSHBOT_DB points at a path under /data instead — the host must
-# mount a persistent volume at /data and the app's dockerignore already
-# excludes sloshbot.db* from the build context, so this is belt-and-suspenders.
-ENV SLOSHBOT_DB=/data/sloshbot.db
+# deploy. The effective SLOSHBOT_DB path is resolved and exported at container
+# boot by start.sh instead of hardcoded here, because it differs by host shape:
+#   - Railway-style hosts: a volume mounted at /data -> start.sh exports
+#     SLOSHBOT_DB=/data/sloshbot.db.
+#   - OpenHost: persistent storage is communicated via OPENHOST_APP_DATA_DIR
+#     at runtime, not a fixed /data path -> start.sh exports
+#     SLOSHBOT_DB=$OPENHOST_APP_DATA_DIR/sloshbot.db.
+# An explicitly-set SLOSHBOT_DB always wins over both. Either way the
+# dockerignore excludes sloshbot.db* from the build context, so nothing is
+# baked in regardless.
 
 # Optional Litestream replication config (see litestream.yml for details).
 # Reading this file at startup is itself gated behind LITESTREAM_BUCKET in
