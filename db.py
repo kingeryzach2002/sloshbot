@@ -1,9 +1,14 @@
 """SQLite is the only interface between the pipeline and the app."""
+import os
 import sqlite3
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-DB_PATH = ROOT / "sloshbot.db"
+# On OpenHost the repo checkout is ephemeral; the DB must live on the
+# persistent disk (OPENHOST_APP_DATA_DIR). SLOSHBOT_DB wins if set explicitly.
+_data_dir = os.environ.get("OPENHOST_APP_DATA_DIR")
+DB_PATH = Path(os.environ.get("SLOSHBOT_DB")
+               or (Path(_data_dir) / "sloshbot.db" if _data_dir else ROOT / "sloshbot.db"))
 SCHEMA_PATH = ROOT / "ingest" / "schema.sql"
 
 

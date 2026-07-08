@@ -7,6 +7,7 @@ Timezone policy (see ARCHITECTURE.md — starts_at is ISO 8601 Pacific):
 """
 from __future__ import annotations
 
+import html
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -23,6 +24,11 @@ COLUMNS = (
     "starts_at", "ends_at", "is_free", "price_min", "price_max",
     "rsvp_type", "image_url", "lat", "lon", "raw", "scraped_at",
 )
+
+# Human-readable text fields; sources (Funcheap especially) ship these with
+# HTML entities still encoded ("&#8220;", "&amp;") — decode on the way in.
+TEXT_COLUMNS = ("title", "description", "host_name", "venue_name", "address",
+                "neighborhood")
 
 MUTABLE_COLUMNS = (
     "title", "description", "starts_at", "ends_at",
@@ -65,6 +71,9 @@ def normalize(rows: list[dict]) -> list[dict]:
         except ValueError:
             ends_at = None  # bad end time is survivable
         normalized = {c: row.get(c) for c in COLUMNS}
+        for c in TEXT_COLUMNS:
+            if isinstance(normalized[c], str):
+                normalized[c] = html.unescape(normalized[c]).strip()
         normalized["starts_at"] = starts_at
         normalized["ends_at"] = ends_at
         # free-form; stored in event_tags. Sources may pass explicit tags;
