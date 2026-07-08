@@ -14,7 +14,6 @@ WEIGHTS = {
 # Perk lenses: the user-facing "what are we hunting" scorers. A future perk
 # scorer (food, live music, ...) becomes a lens by adding its scorer key here.
 LENSES = ["booze"]
-LENS_BOOST = 0.60  # the active lens's share of the blend when ranking
 
 TIER_CONFIDENT = 0.65  # >= this -> "confident"
 TIER_MAYBE = 0.40      # >= this -> "maybe"; below -> hidden
@@ -26,19 +25,6 @@ MAX_PICKS = 3  # hard cap on top-tier events per day — scarcity is the product
 # likely to be a scorer false-positive than genuine sponsorship. Never let
 # them compete for a "confident" slot; they can still surface as "maybe".
 NEVER_CONFIDENT_SOURCES = {"ra", "19hz"}
-
-
-def lens_weights(lens: str, base: dict[str, float] | None = None) -> dict[str, float]:
-    """Blend weights with the active lens boosted to LENS_BOOST; the rest of the
-    base weights share what's left, proportionally."""
-    base = base or WEIGHTS
-    if lens not in base:
-        return base
-    others = {k: v for k, v in base.items() if k != lens}
-    total = sum(others.values()) or 1.0
-    w = {k: (1 - LENS_BOOST) * v / total for k, v in others.items()}
-    w[lens] = LENS_BOOST
-    return w
 
 
 def composite(scores: dict[str, float], weights: dict[str, float] | None = None) -> float:

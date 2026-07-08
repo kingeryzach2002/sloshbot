@@ -16,7 +16,7 @@ from starlette.requests import Request
 from db import get_conn, init_db
 from ingest.geocode import _CACHE_DDL, _lookup
 from scoring.weights import (LENSES, MAX_PICKS, NEVER_CONFIDENT_SOURCES, WEIGHTS,
-                             TIER_CONFIDENT, TIER_MAYBE, composite, lens_weights, tier)
+                             TIER_CONFIDENT, TIER_MAYBE, composite, tier)
 
 app = FastAPI(title="sloshbot")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
@@ -354,9 +354,9 @@ def home(request: Request, lens: str = "", max_mi: float | None = None,
     events = load_events(now - timedelta(hours=1), now + timedelta(days=7), max_mi, min_booze)
 
     settings = get_settings()
-    rank_w = lens_weights(lens, WEIGHTS)
+    # Single lens ("booze"), so match is just the composite (booze) score.
     for e in events:
-        e["match"] = composite(e["scores"], rank_w)
+        e["match"] = e["composite"]
 
     today = now.date()
     tonight_evts = sorted((e for e in events if e["start_dt"].date() == today),
