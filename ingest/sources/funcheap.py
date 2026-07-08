@@ -17,6 +17,7 @@ import json
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from itertools import zip_longest
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -69,21 +70,27 @@ def _discover_links_for_day(date) -> list[str]:
 
 def _discover_posts(limit: int) -> list[dict]:
     """Walk per-day listing pages for the next DAYS_AHEAD days to build an
-    ordered, de-duplicated list of event post links within the target window."""
+    ordered, de-duplicated list of event post links within the target window.
+
+    Busier days (e.g. weekends) can list 40+ events on their own, which would
+    blow through a modest `limit` before later days in the window are ever
+    fetched. To keep coverage spread across the full 10 days instead of
+    front-loading on the earliest/busiest ones, links are gathered per day
+    first and then interleaved round-robin before the limit is applied."""
     today = datetime.now(TZ).date()
+    days = [today + timedelta(days=offset) for offset in range(DAYS_AHEAD + 1)]
+    per_day_links = [_discover_links_for_day(day) for day in days]
+
     seen: set[str] = set()
     posts: list[dict] = []
-    for offset in range(DAYS_AHEAD + 1):
-        if len(posts) >= limit:
-            break
-        day = today + timedelta(days=offset)
-        for link in _discover_links_for_day(day):
-            if link in seen:
+    for links in zip_longest(*per_day_links):
+        for link in links:
+            if link is None or link in seen:
                 continue
             seen.add(link)
             posts.append({"id": None, "link": link})
             if len(posts) >= limit:
-                break
+                return posts
     return posts
 
 
