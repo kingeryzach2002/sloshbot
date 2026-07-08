@@ -372,6 +372,9 @@
   .day { margin-top: 28px; }
   .day:first-of-type { margin-top: 0; }
   .stack { display: grid; gap: 18px; }
+  /* grid items default to min-width:auto — nowrap meta/why lines would widen the
+     card past the column instead of ellipsizing; force them shrinkable */
+  .stack > .ta-card { min-width: 0; max-width: 100%; }
 
   /* confident keeps its glow through the whole lift (decision 6) */
   .ta-card.confident:hover { box-shadow: var(--elev-glow-hover); }
