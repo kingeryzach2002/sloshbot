@@ -5,13 +5,9 @@ weighted average is computed over whichever scores an event actually has.
 """
 
 WEIGHTS = {
-    "booze": 0.70,
-    "logistics": 0.30,
+    "booze": 1.0,
 }
 
-# With two scorers there is exactly one honest knob: the booze↔logistics
-# balance slider in the sidebar (settings key "weight_booze"; logistics gets
-# the remainder). Named presets are gone — they were personality, not signal.
 # Event-type preference isn't a weight at all: it's the tag filter (settings
 # key "included_tags"), a hard filter applied in load_events.
 

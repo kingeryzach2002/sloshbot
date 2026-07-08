@@ -1,6 +1,8 @@
 {# Sticky filter/ranking sidebar — the single home for all filters.
-   Expects: back, weights, has_home, max_mi, tag_counts, included_tags.
-   Uses toggleTag()/clearFilters() defined by the including page. #}
+   Expects: back, weights, has_home, max_mi, tag_counts, included_tags,
+   source_counts, included_sources.
+   Uses toggleTag()/clearFilters()/toggleSource()/clearSourceFilters()
+   defined by the including page. #}
 <style>
   .layout { display: flex; gap: 36px; align-items: flex-start; }
   .side { width: 220px; flex: none; position: sticky; top: 24px; }
@@ -30,22 +32,22 @@
   }
 </style>
 <aside class="side">
-  <h4>ranking</h4>
-  <form class="balance" method="post" action="/settings/tune">
-    <input type="hidden" name="back" value="{{ back }}">
-    <input type="range" name="weight_booze" min="0" max="1" step="0.05"
-           value="{{ weights.booze }}" onchange="this.form.submit()"
-           title="how much free drinks matter vs. time & place">
-    <div class="ends"><span>&#127864; booze {{ (weights.booze * 100) | round | int }}%</span>
-      <span>logistics {{ (weights.logistics * 100) | round | int }}%</span></div>
-  </form>
-
   {% if has_home %}
   <h4>distance</h4>
   <div>
     <a class="schip {{ 'on' if not max_mi }}" href="{{ back }}">any</a>
     {% for mi in [1, 2, 3, 5] %}
       <a class="schip {{ 'on' if max_mi == mi }}" href="{{ back }}?max_mi={{ mi }}">&le; {{ mi }} mi</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if source_counts and source_counts | length > 1 %}
+  <h4>sources{% if included_sources %}<a class="clearlink" onclick="clearSourceFilters('{{ back }}')">clear ({{ included_sources | length }})</a>{% endif %}</h4>
+  <div>
+    {% for s in source_counts %}
+      <span class="schip {{ 'on' if s.source in included_sources }}"
+            onclick="toggleSource('{{ s.source }}')">{{ s.source }}<i>{{ s.n }}</i></span>
     {% endfor %}
   </div>
   {% endif %}

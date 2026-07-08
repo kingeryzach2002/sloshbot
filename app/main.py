@@ -36,6 +36,11 @@ def included_tags(settings: dict) -> list[str]:
     return [t for t in raw.split(",") if t]
 
 
+def included_sources(settings: dict) -> list[str]:
+    raw = settings.get("included_sources", "")
+    return [s for s in raw.split(",") if s]
+
+
 def is_warming_up() -> bool:
     """True on a fresh deploy before the first scrape has landed any events.
     Lets the empty state say "fetching…" (and auto-refresh) instead of blaming
@@ -53,18 +58,20 @@ def tag_counts() -> list[dict]:
         return [dict(r) for r in conn.execute(
             """SELECT t.tag, count(*) AS n FROM event_tags t
                JOIN events e ON e.id = t.event_id
-               WHERE e.starts_at >= ? GROUP BY t.tag
-               ORDER BY n DESC, t.tag""", (now,))]
+               WHERE e.starts_at >= ? AND e.duplicate_of IS NULL
+               GROUP BY t.tag ORDER BY n DESC, t.tag""", (now,))]
 
 
-def active_weights(settings: dict) -> dict:
-    """Current scorer weights: one balance knob (weight_booze, 0–1) from
-    settings; logistics gets the remainder. Falls back to the code default."""
-    try:
-        b = min(1.0, max(0.0, float(settings["weight_booze"])))
-    except (KeyError, ValueError):
-        b = WEIGHTS["booze"]
-    return {"booze": round(b, 2), "logistics": round(1.0 - b, 2)}
+def source_counts() -> list[dict]:
+    """Sources on upcoming events with frequency, most events first — feeds the
+    sidebar's source filter (added once 5 more scrapers started flooding the
+    feed; lets the user mute a noisy source without losing the rest)."""
+    now = datetime.now().isoformat()
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT source, count(*) AS n FROM events
+               WHERE starts_at >= ? AND duplicate_of IS NULL
+               GROUP BY source ORDER BY n DESC, source""", (now,))]
 
 
 def home_coords(settings: dict) -> tuple[float, float] | None:
@@ -104,7 +111,8 @@ def load_events(start: datetime, end: datetime,
                 max_mi: float | None = None) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM events WHERE starts_at >= ? AND starts_at < ? ORDER BY starts_at",
+            """SELECT * FROM events WHERE starts_at >= ? AND starts_at < ?
+               AND duplicate_of IS NULL ORDER BY starts_at""",
             (start.isoformat(), end.isoformat()),
         ).fetchall()
         score_rows = conn.execute("SELECT * FROM scores").fetchall()
@@ -134,11 +142,14 @@ def load_events(start: datetime, end: datetime,
 
     settings = get_settings()
     home = home_coords(settings)
-    weights = active_weights(settings)
+    weights = WEIGHTS
     inc_tags = set(included_tags(settings))
+    inc_sources = set(included_sources(settings))
     events = []
     for r in rows:
         e = dict(r)
+        if inc_sources and e["source"] not in inc_sources:
+            continue  # source filter is a hard filter — every event has a source
         e["distance_mi"] = (haversine_mi(home[0], home[1], e["lat"], e["lon"])
                             if home and e["lat"] is not None else None)
         if max_mi is not None and e["distance_mi"] is not None and e["distance_mi"] > max_mi:
@@ -189,6 +200,7 @@ def group_by_day(events: list[dict]) -> list[tuple[str, list[dict]]]:
 CAL_START_MIN = 8 * 60
 CAL_END_MIN = 24 * 60
 CAL_SPAN = CAL_END_MIN - CAL_START_MIN
+CAL_MAX_PER_DAY = 8  # scarcity: only each day's top matches land on the grid
 
 
 def layout_day(events: list[dict]) -> list[dict]:
@@ -241,27 +253,33 @@ def layout_day(events: list[dict]) -> list[dict]:
 
 
 @app.get("/calendar", response_class=HTMLResponse)
-def calendar(request: Request):
+def calendar(request: Request, max_mi: float | None = None):
     now = datetime.now()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    events = load_events(today, today + timedelta(days=7))
+    events = load_events(today, today + timedelta(days=7), max_mi)
     by_date = defaultdict(list)
     for e in events:
         by_date[e["start_dt"].date()].append(e)
     days = []
     for i in range(7):
         d = today + timedelta(days=i)
+        # Keep only each day's top matches — the grid is for spotting the best
+        # of the day and time conflicts, not for browsing all ~100 events.
+        day_evts = sorted(by_date.get(d.date(), []), key=lambda e: -e["composite"])
+        shown = day_evts[:CAL_MAX_PER_DAY]
         days.append({
             "label": d.strftime("%a"),
             "num": d.strftime("%-d"),
             "is_today": i == 0,
-            "blocks": layout_day(by_date.get(d.date(), [])),
+            "blocks": layout_day(shown),
+            "hidden": len(day_evts) - len(shown),
         })
     now_min = now.hour * 60 + now.minute
     return templates.TemplateResponse(request, "calendar.html", {
         "days": days,
         "view": "calendar",
         "hours": list(range(8, 24)),
+        "cap": CAL_MAX_PER_DAY,
         "now_pct": ((now_min - CAL_START_MIN) / CAL_SPAN * 100
                     if CAL_START_MIN <= now_min < CAL_END_MIN else None),
     })
@@ -294,8 +312,7 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
     events = load_events(now - timedelta(hours=1), now + timedelta(days=7), max_mi)
 
     settings = get_settings()
-    base = active_weights(settings)
-    rank_w = lens_weights(lens, base)
+    rank_w = lens_weights(lens, WEIGHTS)
     for e in events:
         e["match"] = composite(e["scores"], rank_w)
 
@@ -327,7 +344,9 @@ def home(request: Request, lens: str = "", max_mi: float | None = None):
         "has_home": home_coords(settings) is not None,
         "included_tags": included_tags(settings),
         "tag_counts": tag_counts(),
-        "weights": base,
+        "included_sources": included_sources(settings),
+        "source_counts": source_counts(),
+        "weights": WEIGHTS,
         "warming_up": is_warming_up(),
     })
 
@@ -342,9 +361,10 @@ def week(request: Request, max_mi: float | None = None):
         "view": "week",
         "max_mi": max_mi,
         "has_home": home_coords(settings) is not None,
-        "weights": active_weights(settings),
+        "weights": WEIGHTS,
         "n_confident": sum(1 for e in events if e["tier"] == "confident"),
         "tag_counts": tag_counts(), "included_tags": included_tags(settings),
+        "source_counts": source_counts(), "included_sources": included_sources(settings),
         "warming_up": is_warming_up(),
     })
 
@@ -378,16 +398,6 @@ def map_view(request: Request, max_mi: float | None = None):
     })
 
 
-@app.post("/settings/tune")
-def set_tuning(weight_booze: float = Form(...), back: str = Form("/")):
-    """The one ranking knob: booze↔logistics balance (logistics = 1 − booze)."""
-    b = min(1.0, max(0.0, weight_booze))
-    with get_conn() as conn:
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('weight_booze', ?)",
-                     (str(b),))
-    return RedirectResponse(back, status_code=303)
-
-
 @app.post("/settings/tags/toggle")
 def toggle_tag_filter(tag: str):
     """One-tap tag filtering: clicking a tag chip anywhere flips it in/out of
@@ -410,6 +420,30 @@ def toggle_tag_filter(tag: str):
 def clear_tag_filter():
     with get_conn() as conn:
         conn.execute("DELETE FROM settings WHERE key = 'included_tags'")
+    return {"ok": True}
+
+
+@app.post("/settings/sources/toggle")
+def toggle_source_filter(source: str):
+    """One-tap source filtering: mute a noisy scraper without hiding everything."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'included_sources'").fetchone()
+        current = [s for s in (row["value"] if row else "").split(",") if s]
+        if source in current:
+            current.remove(source)
+            state = "off"
+        else:
+            current.append(source)
+            state = "on"
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('included_sources', ?)",
+                     (",".join(current),))
+    return {"ok": True, "state": state}
+
+
+@app.post("/settings/sources/clear")
+def clear_source_filter():
+    with get_conn() as conn:
+        conn.execute("DELETE FROM settings WHERE key = 'included_sources'")
     return {"ok": True}
 
 

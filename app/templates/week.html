@@ -46,7 +46,7 @@
       <div class="empty"><div class="coupe pouring"><i></i></div>
         Pouring your first round — fetching events now.<br>
         <small>This page refreshes itself in a moment.</small></div>
-    {% elif included_tags or max_mi %}
+    {% elif included_tags or included_sources or max_mi %}
       <div class="empty"><div class="coupe"></div>Nothing matches your filters.<br>
         <small>Loosen them to see more.</small></div>
     {% else %}
@@ -72,21 +72,18 @@
   <details class="explain">
     <summary>how scoring works</summary>
     <div class="why">
-      Each event gets two independent scores (0–100), shown as marks on every
-      card (exact numbers under "the numbers"):<br>
-      <b>&#127864; booze</b> — an LLM reads the full event listing and estimates the
-      probability of free drinks, citing its evidence. The five-segment meter
-      is that probability.<br>
-      <b>logistics</b> — starts at 50, then time-of-day, neighborhood, and RSVP
-      friction adjust it (e.g. +25 weeknight sweet spot, −30 waitlisted).<br><br>
+      Each event gets a <b>&#127864; booze</b> score (0–100), shown as a mark on
+      every card (exact number under "the numbers"): an LLM reads the full
+      event listing and estimates the probability of free drinks, citing its
+      evidence. The five-segment meter is that probability.<br><br>
       Event-type preference isn't a score — it's the <b>tags</b> filter in the
       sidebar. Pick the tags you're interested in and only matching events show
       up (events with no tags at all are never hidden by it).<br><br>
-      The gold ring on each card is the <b>match</b>: the booze↔logistics blend
-      at your slider's balance. A bright, glowing card is a <b>confident</b>
-      pick (≥{{ (scoring_info.confident * 100) | int }}, capped at 3 per week);
-      dimmed cards are <b>maybes</b> (≥{{ (scoring_info.maybe * 100) | int }});
-      anything below is hidden. Thresholds live in <code>scoring/weights.py</code>.
+      The gold ring on each card is the <b>match</b>: the booze score. A bright,
+      glowing card is a <b>confident</b> pick (≥{{ (scoring_info.confident * 100) | int }},
+      capped at 3 per week); dimmed cards are <b>maybes</b>
+      (≥{{ (scoring_info.maybe * 100) | int }}); anything below is hidden.
+      Thresholds live in <code>scoring/weights.py</code>.
     </div>
   </details>
   </div><!-- /main -->
@@ -111,6 +108,14 @@
   async function clearFilters(back) {
     await fetch("/settings/tags/clear", { method: "POST" });
     location.href = back;  // back has no query string, so max_mi drops too
+  }
+  async function toggleSource(source) {
+    await fetch(`/settings/sources/toggle?source=${encodeURIComponent(source)}`, { method: "POST" });
+    location.reload();
+  }
+  async function clearSourceFilters(back) {
+    await fetch("/settings/sources/clear", { method: "POST" });
+    location.href = back;
   }
   async function hold(btn, eventId, gcal, lens) {
     fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });

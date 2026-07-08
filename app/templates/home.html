@@ -89,7 +89,7 @@
       <div class="empty"><div class="coupe pouring"><i></i></div>
         Pouring your first round — fetching events now.<br>
         <small>This page refreshes itself in a moment.</small></div>
-    {% elif included_tags or max_mi %}
+    {% elif included_tags or included_sources or max_mi %}
       <div class="empty"><div class="coupe"></div>Nothing matches your filters this week.<br>
         <small>Loosen them above to see more.</small></div>
     {% else %}
@@ -178,6 +178,14 @@
   }
   async function clearFilters(back) {
     await fetch("/settings/tags/clear", { method: "POST" });
+    location.href = back;
+  }
+  async function toggleSource(source) {
+    await fetch(`/settings/sources/toggle?source=${encodeURIComponent(source)}`, { method: "POST" });
+    location.reload();
+  }
+  async function clearSourceFilters(back) {
+    await fetch("/settings/sources/clear", { method: "POST" });
     location.href = back;
   }
   async function hold(btn, eventId, gcal, lens) {
