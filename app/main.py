@@ -372,12 +372,18 @@ def save_filter_settings(body: FilterSettingsBody, user_id: str = Depends(curren
     return {"ok": True}
 
 
-@app.post("/settings/home")
-def set_home(home_address: str = Form(...), user_id: str = Depends(current_user)):
-    """Save home address and geocode it inline (single Nominatim call, cached).
-    Uses the public ingest.geocode.geocode() — no reaching into pipeline privates."""
-    addr = home_address.strip()
+def _save_home(user_id: str, addr: str) -> tuple[float | None, float | None]:
+    """The one place home address + geocoded coords are written. addr="" clears
+    all three home_* keys. A non-empty addr is stored and geocoded inline (one
+    cached Nominatim call, see ingest.geocode.geocode); if geocoding can't
+    resolve it, the address is still saved but the stale lat/lon are cleared so
+    distance sorting quietly turns off rather than pointing at the wrong place.
+    Returns (lat, lon) — (None, None) when cleared or unresolved."""
     with get_conn() as conn:
+        if not addr:
+            conn.execute("DELETE FROM settings WHERE user_id = ? "
+                         "AND key IN ('home_address', 'home_lat', 'home_lon')", (user_id,))
+            return None, None
         conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_address', ?)",
                      (user_id, addr))
         lat, lon = geocode(conn, addr)
@@ -389,6 +395,42 @@ def set_home(home_address: str = Form(...), user_id: str = Depends(current_user)
         else:
             conn.execute("DELETE FROM settings WHERE user_id = ? AND key IN ('home_lat', 'home_lon')",
                          (user_id,))
+        return lat, lon
+
+
+@app.get("/api/home")
+def api_get_home(user_id: str = Depends(current_user)):
+    """Current visitor's saved home address + coords, so a fetch-based setter
+    on ANY page can read/pre-fill it (not just the map's server-rendered form)."""
+    s = data.get_settings(user_id)
+    return {
+        "address": s.get("home_address", ""),
+        "lat": float(s["home_lat"]) if s.get("home_lat") else None,
+        "lon": float(s["home_lon"]) if s.get("home_lon") else None,
+    }
+
+
+class HomeBody(BaseModel):
+    address: str = ""
+
+
+@app.post("/api/home")
+def api_set_home(body: HomeBody, user_id: str = Depends(current_user)):
+    """Set (or clear, with address="") the visitor's home address via fetch,
+    no page reload. `resolved` tells the UI whether the address geocoded — so
+    it can warn "couldn't find that address; distance sorting is off" instead
+    of silently doing nothing."""
+    lat, lon = _save_home(user_id, body.address.strip())
+    return {"ok": True, "resolved": lat is not None,
+            "address": body.address.strip(), "lat": lat, "lon": lon}
+
+
+@app.post("/settings/home")
+def set_home(home_address: str = Form(...), user_id: str = Depends(current_user)):
+    """Legacy form-POST setter behind the map page's server-rendered form —
+    saves via the shared helper, then redirects back. The fetch-based
+    /api/home above is the path for any new UI."""
+    _save_home(user_id, home_address.strip())
     return RedirectResponse("/map", status_code=303)
 
 
