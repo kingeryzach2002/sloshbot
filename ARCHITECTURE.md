@@ -38,17 +38,23 @@ sloshbot/
 │                         #   discovers scorer modules dynamically
 └── app/
     ├── main.py          # FastAPI routes only — composes the layers below,
-    │                     #   plus the write paths (feedback/holds/settings),
+    │                     #   plus the write paths (feedback/holds/settings/home),
     │                     #   and a JSON API
     ├── auth.py           # anonymous cookie identity (current_user dependency)
     ├── models.py        # Event: the in-memory contract + JSON serialization
     ├── data.py          # pure DB reads -> Event (the only read-path SELECTs);
     │                     #   every function takes user_id
-    ├── filters.py       # hard filters (source/price/distance/tag/booze) + chip counts
+    ├── filters.py       # FilterState + hard filters (source/price/distance/tag/
+    │                     #   booze) + chip counts; URL-first, sticky-default fallback
     ├── policy.py        # ranking policy: composite/tier, source demotion, per-day cap
     ├── presenter.py     # view-model: datetimes, distance, gcal link, calendar geometry
-    └── templates/       # tonight/week/calendar/map views + partials
-                          #   (Jinja, no build chain)
+    └── templates/       # tonight/week/calendar/map views + partials (Jinja, no
+                          #   build chain): _main_home.html / _main_week.html /
+                          #   _main_calendar.html are the fetch+swap fragments for
+                          #   #page-main; _filterbar.html is the URL-state +
+                          #   fetch+swap JS filter engine; _meter.html is the
+                          #   booze-meter macro; _feedback.html / _empty.html are
+                          #   shared partials. No login/signup templates.
 ```
 
 The read pipeline is one directed flow, one responsibility per module:
@@ -69,11 +75,15 @@ identity cookie so no one can forge another visitor's identity.
 Event-type preference used to be a third scorer ("category"/"fit") driven by a
 hardcoded keyword dict in `preferences.py`. It's gone in favor of a tag filter:
 `event_tags` (populated by `ingest/tags.py`) already carries per-event tags, and
-the week view lets you check which tags you want; the selection lives in the
-`settings` table (`included_tags`, per-visitor — see Anonymous identity below) and is a
-hard filter applied in `app/filters.py::apply` — events with none of your
-selected tags are hidden, events with no tags at all are never hidden by it. No
-code edit or rescore needed to change what you're interested in.
+the filter bar lets you check which tags you want. Tag selection is resolved
+per-request as a `FilterState` (see `app/filters.py`): it comes from the URL
+query string when present (shipped no-reload filtering — see "The fetch+swap
+frontend" below), falling back to the visitor's sticky defaults saved in the
+`settings` table (`included_tags`, per-visitor — see Anonymous identity below)
+on a bare URL. Either way it's a hard filter applied in `app/filters.py::apply`
+— events with none of your selected tags are hidden, events with no tags at
+all are never hidden by it. No code edit or rescore needed to change what
+you're interested in.
 
 **Data flow (batch, never live):**
 `pipeline.py` (cron / `--loop` / manual) → ingest each source → dedup → geocode
@@ -100,7 +110,7 @@ an identity from their very first request.
 
 | Scoped per-visitor | Shared / crowdsourced across everyone |
 |---|---|
-| `settings` (home address, included_tags/sources, price_filter) | `events`, `scores`, `event_tags` — the catalog itself |
+| `settings` (home address, sticky filter defaults — included_tags/sources, price_filter, max_mi, min_booze) | `events`, `scores`, `event_tags` — the catalog itself |
 | `feedback` — *your* went/skipped/as-promised taps (drives card button state) | host reputation — `_host_reputation()` in `booze.py` aggregates **every** visitor's feedback for a host, not just yours; it gets more accurate as more people use the app |
 | `holds` — *your* calendar holds (drives *your* morning-after debrief) | `geocode_cache` — an address string → lat/lon lookup, safe to share |
 
@@ -125,41 +135,48 @@ rows, not worth a migration to clean up.
 
 The web app is split into single-responsibility layers with one directed read
 flow. The HTTP layer (`app/main.py`) is thin: it resolves the caller's
-anonymous identity, then composes the read pipeline and either renders Jinja
-OR serializes JSON — the SAME data either way.
+anonymous identity, resolves the active `FilterState` (URL vs. sticky
+defaults — see `resolve_filters` below), then composes the read pipeline and
+either renders Jinja (full page or, for `?partial=1`, just the swappable
+fragment) OR serializes JSON — the SAME data either way.
 
 ```
                          ┌───────────────────────── app/main.py (FastAPI) ─────────────────────────┐
   browser / client  ───▶ │  auth.current_user  →  user_id                                          │
                          │        │                                                                 │
-                         │  GET /  /week  /calendar  /map          GET /api/events  /api/counts     │
-                         │        │  (HTML via Jinja templates)            │  (JSON via Event.to_dict)│
+                         │  resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)     │
+                         │        │  → FilterState (URL if f present, else sticky settings default)  │
+                         │        ▼                                                                  │
+                         │  GET /  /week  /calendar  /map          GET /api/events  /api/counts      │
+                         │        │  (HTML, or fragment if           /api/home                       │
+                         │        │   ?partial=1 — see below)              │  (JSON via Event.to_dict)│
                          │        └──────────────┬─────────────────────────┘                          │
-                         │                       ▼   load_events(user_id, start, end, max_mi, min_booze)│
+                         │                       ▼   load_events(user_id, start, end, fs)              │
                          │   data.fetch_events ─▶ presenter.enrich ─▶ filters.apply ─▶ policy.rank     │
                          │   (SQLite reads →      (start/end dt,       (source/price/   (composite/    │
                          │    Event objects,      distance, gcal)      distance/tag/    tier, source  │
                          │    THIS user's fb,                          booze filters)   demotion,     │
                          │    shared host_rep)                                          per-day cap)  │
                          │                                                                             │
-                         │   writes:  POST /feedback/{id}/{verdict}   /hold/{id}   /settings/*  ──────▶│──▶ SQLite
-                         │            (all scoped to user_id from the session cookie)                  │
+                         │   writes:  POST /feedback/{id}/{verdict}  /hold/{id}                        │
+                         │            /settings/filters (sticky defaults)  /api/home  /settings/home  │
+                         │            (all scoped to user_id from the session cookie)         ────────▶│──▶ SQLite
                          └─────────────────────────────────────────────────────────────────────────────┘
                                      ▲ scoring/weights.py: composite(), tier(), thresholds, LENSES, LENS_META
 ```
 
 **Layer responsibilities (`app/`):**
 
-| Module | Owns | A frontend rewrite… |
-|---|---|---|
-| `models.py` | `Event` — field contract + `to_dict()` JSON shape | **consumes** (it's the API payload) |
-| `auth.py` | anonymous cookie identity, `current_user` dependency | never touches (a client app still needs the session cookie or an equivalent) |
-| `data.py` | the only read-path SQL → `Event`; every function takes `user_id` | never touches |
-| `presenter.py` | datetimes, distance, gcal link, **calendar geometry** (`layout_day`) | consumes dt/distance/gcal via API; see calendar note below |
-| `filters.py` | hard filters + `chip_counts` | consumes counts; see filter-state note |
-| `policy.py` | composite/tier rollup, source demotion, per-day `MAX_PICKS` cap | consumes `tier`/`composite` |
-| `main.py` | routes only — identity + compose + render/serialize + write paths | **replace** the HTML routes; keep identity + the API + write paths |
-| `templates/` | Jinja HTML, client JS, design tokens | **replace entirely** except the identity cookie's semantics |
+| Module | Owns |
+|---|---|
+| `models.py` | `Event` — field contract + `to_dict()` JSON shape |
+| `auth.py` | anonymous cookie identity, `current_user` dependency |
+| `data.py` | the only read-path SQL → `Event`; every function takes `user_id` |
+| `presenter.py` | datetimes, distance, gcal link, calendar geometry (`layout_day`) |
+| `filters.py` | `FilterState` + hard filters + `chip_counts` (URL-first, sticky-default fallback — see below) |
+| `policy.py` | composite/tier rollup, source demotion, per-day `MAX_PICKS` cap |
+| `main.py` | routes only — identity + filter resolution + compose + render/serialize + write paths |
+| `templates/` | Jinja HTML, the fetch+swap client JS, design tokens |
 
 Ranking *primitives* (`composite`, `tier`, thresholds, `LENSES`, `LENS_META`)
 live in `scoring/weights.py`; the `MAX_PICKS` scarcity cap is a *presentation*
@@ -167,21 +184,77 @@ policy in `app/policy.py`. Per-lens display metadata (emoji, label) lives once
 in `scoring/weights.py::LENS_META` — adding a perk lens is a config entry there
 plus its scorer, not copy-pasted markup.
 
+## The fetch+swap frontend
+
+Filtering used to mean a POST to a settings endpoint plus a full page reload.
+It doesn't anymore. Filter state now lives in the URL query string, and
+clicking a filter swaps content in place:
+
+1. The visitor clicks a tag/source/price chip or drags a distance/booze
+   slider in `_filterbar.html`.
+2. Its JS updates the URL query string (`tags=`, `sources=`, `price=`,
+   `max_mi=`, `min_booze=`, plus `f=1` marking "filters come from the URL")
+   and calls `history.pushState` — the URL is shareable/bookmarkable and
+   back/forward works.
+3. It also debounce-saves the same selection via `POST /settings/filters` so
+   it becomes the visitor's *sticky default* the next time they land on a
+   bare URL (no `f` param).
+4. It fetches the current page's path with the same query string plus
+   `&partial=1`. The server reruns the exact same route handler and pipeline,
+   but renders the fragment template (`_main_home.html` / `_main_week.html` /
+   `_main_calendar.html`) instead of the full-page template — same context,
+   smaller response.
+5. The JS swaps the fragment's HTML into `#page-main` (present in `home.html`,
+   `week.html`, `calendar.html`) — no navigation, no full-page reload.
+
+`/map` doesn't use this fragment-swap path — Leaflet pins aren't server-
+rendered HTML. Instead its filter chips re-fetch `GET /api/events` with the
+new query params and redraw pins client-side from the JSON response.
+
+`resolve_filters()` in `app/main.py` is the seam: if the URL carries `f`,
+`FilterState` comes *only* from the URL (`filters.from_query`) — an absent
+param means that filter is off even if a sticky default exists. If `f` is
+absent, the visitor's sticky defaults apply (`filters.from_settings`), with
+`max_mi`/`min_booze` still overridable by query params for old bookmarked
+links. The `settings` table therefore holds only *sticky defaults* now, not
+the live filter — the six old per-dimension toggle-and-clear write endpoints
+that used to mutate it directly (one toggle + one clear each for tags,
+sources, and price) are gone, replaced by the single `POST /settings/filters`.
+
 ## HTTP surface
 
 ```
-HTML   GET /                 hero "tonight's pick" + backups + rest-of-week
-       GET /week             7-day digest, grouped by day, tiered
-       GET /calendar         week grid (uses presenter.layout_day)
-       GET /map              Leaflet pins + home/radius rings
-         (all accept ?max_mi= &min_booze= ; home also ?lens=)
-JSON   GET /api/events       {events: [Event.to_dict(), ...]}  ?days= &max_mi= &min_booze=
-       GET /api/counts       {tags:[{tag,n}], sources:[{source,n}], price:{free,paid}}
-WRITE  POST /feedback/{event_id}/{verdict}?lens=   toggle YOUR verdict → {ok, state}
+UNAUTH GET  /healthz                unauthenticated liveness check → {ok, events: int}
+
+HTML   GET  /                 hero "tonight's pick" + backups + rest-of-week
+       GET  /week             7-day digest, grouped by day, tiered
+       GET  /calendar         week grid (uses presenter.layout_day)
+       GET  /map              Leaflet pins + home/radius rings (no partial mode)
+       GET  /tonight          307 redirect → /  (tonight IS the home view now)
+         `/`, `/week`, `/calendar` also accept `?partial=1` → render just the
+         `#page-main` fragment (`_main_home.html` / `_main_week.html` /
+         `_main_calendar.html`) instead of the full page — see "The fetch+swap
+         frontend" above.
+         All four GET list routes (`/`, `/week`, `/calendar`, `/map`) — plus
+         `/api/events` — accept the URL filter params: `f` (sentinel: filters
+         come only from the URL, ignoring sticky defaults), `tags` (csv),
+         `sources` (csv), `price` (free|paid), `max_mi` (float), `min_booze`
+         (float). `/` also takes `?lens=`.
+
+JSON   GET  /api/events       {events: [Event.to_dict(), ...]}  ?days= + the URL filter params above
+       GET  /api/counts       {tags:[{tag,n}], sources:[{source,n}], price:{free,paid}}
+       GET  /api/home         {address, lat, lon} — current visitor's saved home
+       POST /api/home  (JSON {address})  set/clear (address="") YOUR home, geocoded
+                                          inline → {ok, resolved, address, lat, lon}
+
+WRITE  POST /settings/filters  (JSON {tags, sources, price, max_mi, min_booze})
+                                          persist YOUR sticky filter defaults → {ok}
+       POST /settings/home  (form: home_address)   legacy map-page form setter;
+                                          saves + geocodes YOUR home → 303 redirect to /map
+                                          (the fetch-based /api/home above is the
+                                          path for any new UI)
+       POST /feedback/{event_id}/{verdict}?lens=   toggle YOUR verdict → {ok, state}
        POST /hold/{event_id}?lens=                 record YOUR calendar hold → {ok}
-       POST /settings/tags|sources|price/toggle    flip YOUR filter → {ok, state}
-       POST /settings/tags|sources|price/clear     clear YOUR filter dimension
-       POST /settings/home  (form: home_address)   save + geocode YOUR home → 303 redirect
          (every write above is scoped to the visitor's anonymous user_id — see
           Anonymous identity above)
 ```
@@ -193,7 +266,12 @@ verdicts), `host_rep` (shared across every user), `composite`, `tier`,
 the anonymous id; the read side of a client frontend needs **no new backend
 logic** — just `/api/events`.
 
-## Rewriting the frontend (React or similar)
+## Rewriting the frontend (React or similar, full SPA)
+
+The URL-state + fetch+swap fragment design above already gets most of the way
+to a no-reload frontend without a framework or build chain. A *full* client-
+rendered SPA rewrite is still a bigger step — it would drop server-rendered
+HTML entirely in favor of the JSON API — and two seams there are still open:
 
 **Touch / replace:** everything under `app/templates/` (Jinja HTML, the inline
 client JS in `_filterbar.html` / `_feedback.html` / `map.html`, and the design
@@ -205,9 +283,12 @@ the visual contract. The HTML routes in `main.py` (`home`, `week`, `calendar`,
 **Keep / don't touch:** `auth.py`, `data.py`, `filters.py`, `policy.py`,
 `models.py`, `scoring/`, and the identity + `/api/*` + write routes. That's the
 whole backend the client talks to — a client app still needs to carry the
-session cookie (or swap in a bearer-token variant of `current_user`).
+session cookie (or swap in a bearer-token variant of `current_user`). Filter
+state itself is no longer an open question — see "The fetch+swap frontend"
+above; a full SPA can keep reading/writing the same URL params + `/settings/filters`
+sticky defaults, or hold filter state entirely client-side over `/api/events`.
 
-**Three decisions the rewrite must make** (seams exist; pick a side):
+**Two decisions a full SPA rewrite still must make** (seams exist; pick a side):
 
 1. **Calendar geometry** — `presenter.layout_day` (overlap lane-packing → % top/
    height/left/width) is currently only called by the `/calendar` HTML route.
@@ -216,18 +297,8 @@ session cookie (or swap in a bearer-token variant of `current_user`).
 2. **"Tonight" selection** — the hero/backups/rest-of-week split lives in the
    `home()` route, not the API. Either add `GET /api/tonight`, or replicate the
    "pick the day's best" selection client-side over `/api/events`.
-3. **Filter state** — today it's split and server-authoritative: `max_mi`/
-   `min_booze` are URL query params (already accepted by `/api/events`), while
-   tag/source/price are per-user rows in the `settings` table (scoped by
-   `user_id`, not global anymore) toggled via POST + full reload. A client app
-   will likely still want per-session, client-held filters on top of that.
-   Either (a) filter client-side over the `/api/events` payload, or (b) extend
-   `/api/events` to accept `tag`/`source`/`price` as query params (moving that
-   evaluation off the `settings` table). Note the per-user-but-still-global-
-   across-tabs settings model can't support two tabs / two what-if states for
-   the same account — resolving that is part of this call.
 
-None of the three is blocked; each is additive because the read pipeline and its
+Neither is blocked; each is additive because the read pipeline and its
 serialization boundary already exist.
 
 ## Event schema — THE contract
@@ -297,12 +368,14 @@ CREATE TABLE users (
   created_at    TEXT NOT NULL
 );
 
-CREATE TABLE settings (            -- home_address/home_lat/home_lon,
-  user_id TEXT NOT NULL REFERENCES users(id),   --   included_tags, included_sources,
-  key     TEXT NOT NULL,                        --   price_filter
-  value   TEXT NOT NULL,
-  PRIMARY KEY (user_id, key)
-);
+CREATE TABLE settings (            -- home_address/home_lat/home_lon, and the
+  user_id TEXT NOT NULL REFERENCES users(id),   --   visitor's STICKY filter
+  key     TEXT NOT NULL,                        --   defaults only (included_tags,
+  value   TEXT NOT NULL,                        --   included_sources, price_filter,
+  PRIMARY KEY (user_id, key)                    --   max_mi, min_booze) — the live
+);                                               --   filter comes from the URL when
+                                                  --   present; see "The fetch+swap
+                                                  --   frontend" above
 
 CREATE TABLE feedback (
   user_id    TEXT NOT NULL REFERENCES users(id),
