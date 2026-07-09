@@ -18,7 +18,7 @@ Settings -> Environment Variables). They are read when the container starts.
 
 | Variable | What it does |
 |---|---|
-| `SLOSHBOT_SECRET_KEY` | A random secret used to keep login sessions secure. Set once, never share it. |
+| `SLOSHBOT_SECRET_KEY` | A random secret that signs each visitor's anonymous identity cookie, so no one can impersonate another visitor. Set once, never share it. |
 | `ANTHROPIC_API_KEY` | Lets the app call Claude to help score/summarize events. Required for scoring to work. |
 | `PIPELINE_INTERVAL_HOURS` | How often (in hours) the app refreshes event data in the background. Leave unset (or `0`) if your host has its own scheduler and you're running the refresh job separately instead. |
 | `PORT` | Which network port the app listens on. Most hosts set this automatically — you usually don't need to touch it. |
@@ -93,17 +93,17 @@ file automatically on every boot. Variables you can put in it:
 | Variable | What it does |
 |---|---|
 | `ANTHROPIC_API_KEY` | Lets the app call Claude to help score/summarize events. Required for scoring to work. |
-| `SLOSHBOT_SECRET_KEY` | Session-signing secret. You normally don't need to set this yourself — see below. |
+| `SLOSHBOT_SECRET_KEY` | Signs each visitor's anonymous identity cookie so no one can impersonate another visitor. You normally don't need to set this yourself — see below. |
 | `PIPELINE_INTERVAL_HOURS` | How often (in hours) the background refresh runs. Defaults to `4` automatically on OpenHost (see below); set this only to override that default. |
 | `LITESTREAM_BUCKET`, `LITESTREAM_ENDPOINT`, `LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY` | Same offsite-backup variables described above — same meaning, just placed in this file instead of a dashboard. |
 
 **Self-generating secret key:** you don't have to invent or set
 `SLOSHBOT_SECRET_KEY` yourself. On first boot, if it isn't already present
 in `secrets.env`, sloshbot generates a random one and saves it back into
-that file automatically, so logins are secure from the very first deploy
-with zero action from you. (If you ever want to force new sessions —
-e.g. after a suspected leak — delete that line from `secrets.env` and
-redeploy; a fresh one will be generated.)
+that file automatically, so visitor identities are secure from the very
+first deploy with zero action from you. (If you ever want to force new
+visitor identities — e.g. after a suspected leak — delete that line from
+`secrets.env` and redeploy; a fresh one will be generated.)
 
 **Background refresh runs by default:** unlike Railway (where you set
 `PIPELINE_INTERVAL_HOURS` yourself because you might be using an external

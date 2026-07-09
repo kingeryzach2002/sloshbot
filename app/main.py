@@ -2,10 +2,11 @@
 (data -> presenter -> filters -> policy) and renders it, plus the small write
 paths (feedback, holds, settings). Read-only over the DB except those writes.
 
-Public multi-user app: every route below the auth routes requires a signed-in
-user (session cookie via app.auth) — settings/feedback/holds are scoped to
-that user_id. The event catalog itself (events/scores/tags) is shared and
-crowdsourced across every user, deliberately unscoped — see app/data.py.
+Public multi-user app: every visitor gets an anonymous identity on first
+touch (random id in a signed session cookie, no login/password — see
+app.auth) — settings/feedback/holds are scoped to that user_id. The event
+catalog itself (events/scores/tags) is shared and crowdsourced across every
+user, deliberately unscoped — see app/data.py.
 
   data.fetch_events   -> raw events + scores/tags/(this user's)feedback/host_rep
   presenter.enrich    -> start/end datetimes, distance, calendar link
@@ -27,8 +28,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
 from app import data, filters, policy, presenter
-from app.auth import (RedirectToLogin, authenticate, create_user,
-                      login_redirect_handler, require_user_api, require_user_html)
+from app.auth import current_user
 from app.filters import FilterState
 from app.models import Event
 from db import get_conn, init_db
@@ -43,8 +43,12 @@ app = FastAPI(title="sloshbot")
 # by itself, but a fixed/guessable key would let anyone forge a session).
 app.add_middleware(SessionMiddleware,
                    secret_key=os.environ.get("SLOSHBOT_SECRET_KEY", "dev-insecure-secret-change-me"),
-                   same_site="lax")
-app.add_exception_handler(RedirectToLogin, login_redirect_handler)
+                   same_site="lax",
+                   # 400 days: without this the cookie is a session cookie
+                   # that dies when the browser closes, and anonymous users
+                   # (who have no other way to recover their identity) would
+                   # lose their settings/feedback/holds on every restart.
+                   max_age=34560000)
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 templates.env.globals["scoring_info"] = {
@@ -111,55 +115,11 @@ def _chip_counts_now(user_id: str) -> dict:
     return filters.chip_counts(data.fetch_events(now, now + timedelta(days=7), user_id))
 
 
-@app.get("/signup", response_class=HTMLResponse)
-def signup_form(request: Request, error: str | None = None):
-    return templates.TemplateResponse(request, "signup.html", {"error": error})
-
-
-@app.post("/signup")
-def signup(request: Request, email: str = Form(...), password: str = Form(...),
-          password_confirm: str = Form(...)):
-    if len(password) < 8:
-        return templates.TemplateResponse(request, "signup.html",
-            {"error": "Password must be at least 8 characters."})
-    if password != password_confirm:
-        return templates.TemplateResponse(request, "signup.html",
-            {"error": "Passwords don't match."})
-    try:
-        user_id = create_user(email, password)
-    except ValueError as exc:
-        return templates.TemplateResponse(request, "signup.html", {"error": str(exc)})
-    request.session["user_id"] = user_id
-    return RedirectResponse("/", status_code=303)
-
-
-@app.get("/login", response_class=HTMLResponse)
-def login_form(request: Request, error: str | None = None, next: str = "/"):
-    return templates.TemplateResponse(request, "login.html", {"error": error, "next": next})
-
-
-@app.post("/login")
-def login(request: Request, email: str = Form(...), password: str = Form(...),
-         next: str = Form("/")):
-    user_id = authenticate(email, password)
-    if not user_id:
-        return templates.TemplateResponse(request, "login.html",
-            {"error": "Incorrect email or password.", "next": next})
-    request.session["user_id"] = user_id
-    return RedirectResponse(next or "/", status_code=303)
-
-
-@app.post("/logout")
-def logout(request: Request):
-    request.session.clear()
-    return RedirectResponse("/login", status_code=303)
-
-
-# Deliberately has NO auth dependency: every other route requires a signed-in
-# user (require_user_html/require_user_api), but a host's health checker isn't
-# signed in and can't follow a 303 to /login — it just needs a plain 200. Keep
-# this endpoint dumb: no session, no user-scoped data, just proof the process
-# is alive and the DB is reachable.
+# Deliberately has NO dependency: every other route resolves an anonymous
+# identity via app.auth.current_user, but a host's health checker doesn't
+# carry a cookie and doesn't need one — it just needs a plain 200. Keep this
+# endpoint dumb: no session, no user-scoped data, just proof the process is
+# alive and the DB is reachable.
 @app.get("/healthz")
 def healthz():
     with get_conn() as conn:
@@ -171,7 +131,7 @@ def healthz():
 def calendar(request: Request, f: str | None = None, tags: str | None = None,
             sources: str | None = None, price: str | None = None,
             max_mi: float | None = None, min_booze: float | None = None,
-            partial: int | None = None, user_id: str = Depends(require_user_html)):
+            partial: int | None = None, user_id: str = Depends(current_user)):
     fs = resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)
     now = datetime.now()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -242,7 +202,7 @@ def pending_debrief(user_id: str) -> dict | None:
 def home(request: Request, lens: str = "", f: str | None = None, tags: str | None = None,
          sources: str | None = None, price: str | None = None,
          max_mi: float | None = None, min_booze: float | None = None,
-         partial: int | None = None, user_id: str = Depends(require_user_html)):
+         partial: int | None = None, user_id: str = Depends(current_user)):
     """Hero view: the single best move tonight under the active lens."""
     if lens not in LENSES:
         lens = LENSES[0]
@@ -301,7 +261,7 @@ def home(request: Request, lens: str = "", f: str | None = None, tags: str | Non
 def week(request: Request, f: str | None = None, tags: str | None = None,
         sources: str | None = None, price: str | None = None,
         max_mi: float | None = None, min_booze: float | None = None,
-        partial: int | None = None, user_id: str = Depends(require_user_html)):
+        partial: int | None = None, user_id: str = Depends(current_user)):
     fs = resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)
     now = datetime.now()
     events = load_events(user_id, now - timedelta(hours=3), now + timedelta(days=7), fs)
@@ -334,7 +294,7 @@ def tonight():
 def map_view(request: Request, f: str | None = None, tags: str | None = None,
             sources: str | None = None, price: str | None = None,
             max_mi: float | None = None, min_booze: float | None = None,
-            user_id: str = Depends(require_user_html)):
+            user_id: str = Depends(current_user)):
     fs = resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)
     now = datetime.now()
     events = load_events(user_id, now - timedelta(hours=3), now + timedelta(days=7), fs)
@@ -371,7 +331,7 @@ def map_view(request: Request, f: str | None = None, tags: str | None = None,
 def api_events(days: int = 7, f: str | None = None, tags: str | None = None,
                sources: str | None = None, price: str | None = None,
                max_mi: float | None = None, min_booze: float | None = None,
-               user_id: str = Depends(require_user_api)):
+               user_id: str = Depends(current_user)):
     fs = resolve_filters(user_id, f, tags, sources, price, max_mi, min_booze)
     now = datetime.now()
     events = load_events(user_id, now - timedelta(hours=1), now + timedelta(days=days), fs)
@@ -379,7 +339,7 @@ def api_events(days: int = 7, f: str | None = None, tags: str | None = None,
 
 
 @app.get("/api/counts")
-def api_counts(user_id: str = Depends(require_user_api)):
+def api_counts(user_id: str = Depends(current_user)):
     return _chip_counts_now(user_id)
 
 
@@ -392,7 +352,7 @@ class FilterSettingsBody(BaseModel):
 
 
 @app.post("/settings/filters")
-def save_filter_settings(body: FilterSettingsBody, user_id: str = Depends(require_user_api)):
+def save_filter_settings(body: FilterSettingsBody, user_id: str = Depends(current_user)):
     """Persist the user's sticky filter defaults. Empty list/string/null for a
     field deletes that settings key; a non-empty value upserts it."""
     values = {
@@ -413,7 +373,7 @@ def save_filter_settings(body: FilterSettingsBody, user_id: str = Depends(requir
 
 
 @app.post("/settings/home")
-def set_home(home_address: str = Form(...), user_id: str = Depends(require_user_html)):
+def set_home(home_address: str = Form(...), user_id: str = Depends(current_user)):
     """Save home address and geocode it inline (single Nominatim call, cached).
     Uses the public ingest.geocode.geocode() — no reaching into pipeline privates."""
     addr = home_address.strip()
@@ -434,7 +394,7 @@ def set_home(home_address: str = Form(...), user_id: str = Depends(require_user_
 
 @app.post("/feedback/{event_id}/{verdict}")
 def toggle_feedback(event_id: str, verdict: str, lens: str = "",
-                    user_id: str = Depends(require_user_api)):
+                    user_id: str = Depends(current_user)):
     """Toggle a verdict: on if absent, off if present. Clears its opposite."""
     assert verdict in FEEDBACK_PAIRS
     if verdict in ("went", "skipped"):
@@ -458,7 +418,7 @@ def toggle_feedback(event_id: str, verdict: str, lens: str = "",
 
 
 @app.post("/hold/{event_id}")
-def record_hold(event_id: str, lens: str = "", user_id: str = Depends(require_user_api)):
+def record_hold(event_id: str, lens: str = "", user_id: str = Depends(current_user)):
     """Remember that the user placed a calendar hold — feeds their debrief."""
     with get_conn() as conn:
         conn.execute(

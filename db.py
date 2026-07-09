@@ -29,8 +29,8 @@ def get_conn() -> sqlite3.Connection:
 
 
 # Stable id for data written before multi-user accounts existed. Preserved,
-# never deleted — reassign_legacy_user() moves it onto a real account once
-# the site owner signs up for real.
+# never deleted — it just stays a permanently-anonymous bucket now that
+# there's no login to reassign it onto.
 LEGACY_USER_ID = "legacy"
 
 
@@ -70,12 +70,39 @@ def init_db() -> None:
                 DROP TABLE feedback_old;
             """)
         _migrate_to_multi_user(conn)
+        _migrate_users_to_anonymous(conn)
+
+
+def _migrate_users_to_anonymous(conn: sqlite3.Connection) -> None:
+    """Pre-anonymous-identity DBs had NOT NULL email/password_hash on users
+    (from the password-login era). Anonymous users have neither, so drop the
+    NOT NULL constraints, preserving every existing row. Fresh DBs built from
+    the current schema.sql are already nullable and this is a no-op.
+
+    Pre-existing password accounts (if any) simply become orphaned rows once
+    login is gone — their data stays in the DB but is no longer reachable by
+    anyone, which is fine for this transition."""
+    cols = {r["name"]: r["notnull"] for r in conn.execute("PRAGMA table_info(users)")}
+    if not (cols.get("email") or cols.get("password_hash")):
+        return  # already nullable (or a fresh DB)
+
+    conn.executescript("""
+        ALTER TABLE users RENAME TO users_old;
+        CREATE TABLE users (
+          id            TEXT PRIMARY KEY,
+          email         TEXT UNIQUE,
+          password_hash TEXT,
+          created_at    TEXT NOT NULL
+        );
+        INSERT INTO users (id, email, password_hash, created_at)
+        SELECT id, email, password_hash, created_at FROM users_old;
+        DROP TABLE users_old;
+    """)
 
 
 def _migrate_to_multi_user(conn: sqlite3.Connection) -> None:
     """Pre-accounts DBs had global (unscoped) settings/feedback/holds. Scope
-    them to LEGACY_USER_ID so existing personal data survives the upgrade —
-    reassign_legacy_user() moves it onto a real account after signup."""
+    them to LEGACY_USER_ID so existing personal data survives the upgrade."""
     settings_cols = {r["name"] for r in conn.execute("PRAGMA table_info(settings)")}
     feedback_cols = {r["name"] for r in conn.execute("PRAGMA table_info(feedback)")}
     holds_cols = {r["name"] for r in conn.execute("PRAGMA table_info(holds)")}
@@ -137,13 +164,3 @@ def _migrate_to_multi_user(conn: sqlite3.Connection) -> None:
                SELECT ?, event_id, lens, created_at FROM holds_old""",
             (LEGACY_USER_ID,))
         conn.execute("DROP TABLE holds_old")
-
-
-def reassign_legacy_user(new_user_id: str) -> None:
-    """One-time: move LEGACY_USER_ID's settings/feedback/holds onto a real
-    account after the site owner signs up for real. Safe to call once; a
-    second call is a no-op since the legacy rows will already be gone."""
-    with get_conn() as conn:
-        for table in ("settings", "feedback", "holds"):
-            conn.execute(f"UPDATE {table} SET user_id = ? WHERE user_id = ?",
-                         (new_user_id, LEGACY_USER_ID))

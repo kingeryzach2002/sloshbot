@@ -3,8 +3,9 @@
 A multi-user tool that aggregates SF events, scores them with pluggable
 scorers (including free-booze likelihood), and presents a tiered candidate
 list with tentative-hold calendar links. The event catalog and scores are
-shared and crowdsourced across every signed-up user; only preferences and
-personal state (home address, filters, feedback, holds) are per-account.
+shared and crowdsourced across every visitor; only preferences and
+personal state (home address, filters, feedback, holds) are per-visitor
+(anonymous).
 
 ## Layout
 
@@ -37,17 +38,16 @@ sloshbot/
 │                         #   discovers scorer modules dynamically
 └── app/
     ├── main.py          # FastAPI routes only — composes the layers below,
-    │                     #   plus auth routes, the write paths
-    │                     #   (feedback/holds/settings), and a JSON API
-    ├── auth.py           # password hashing, session-cookie identity,
-    │                     #   require_user_html / require_user_api dependencies
+    │                     #   plus the write paths (feedback/holds/settings),
+    │                     #   and a JSON API
+    ├── auth.py           # anonymous cookie identity (current_user dependency)
     ├── models.py        # Event: the in-memory contract + JSON serialization
     ├── data.py          # pure DB reads -> Event (the only read-path SELECTs);
     │                     #   every function takes user_id
     ├── filters.py       # hard filters (source/price/distance/tag/booze) + chip counts
     ├── policy.py        # ranking policy: composite/tier, source demotion, per-day cap
     ├── presenter.py     # view-model: datetimes, distance, gcal link, calendar geometry
-    └── templates/       # tonight/week/calendar/map/login/signup views + partials
+    └── templates/       # tonight/week/calendar/map views + partials
                           #   (Jinja, no build chain)
 ```
 
@@ -63,13 +63,14 @@ Run locally with `uv run uvicorn app.main:app --reload`; refresh data with
 one shot; `--loop --interval N` keeps it running without native cron, `--rescore`
 forces a full booze rescore instead of unscored-only — expensive, use after a
 scorer prompt/heuristic change). `SLOSHBOT_SECRET_KEY` must be set to a real
-random value before hosting publicly — it signs the session cookie.
+random value before hosting publicly — it signs each visitor's anonymous
+identity cookie so no one can forge another visitor's identity.
 
 Event-type preference used to be a third scorer ("category"/"fit") driven by a
 hardcoded keyword dict in `preferences.py`. It's gone in favor of a tag filter:
 `event_tags` (populated by `ingest/tags.py`) already carries per-event tags, and
 the week view lets you check which tags you want; the selection lives in the
-`settings` table (`included_tags`, now per-user — see Accounts below) and is a
+`settings` table (`included_tags`, per-visitor — see Anonymous identity below) and is a
 hard filter applied in `app/filters.py::apply` — events with none of your
 selected tags are hidden, events with no tags at all are never hidden by it. No
 code edit or rescore needed to change what you're interested in.
@@ -78,27 +79,29 @@ code edit or rescore needed to change what you're interested in.
 `pipeline.py` (cron / `--loop` / manual) → ingest each source → dedup → geocode
 → `scoring.run` (scores unscored events, cached) → prune → SQLite → web app
 (reads only) → user actions (feedback, calendar holds, settings) write back to
-SQLite, scoped to the signed-in user_id.
+SQLite, scoped to the visitor's anonymous user_id.
 
 The web app never scrapes and never calls an LLM. If the UI is broken, the
 pipeline is fine; if scraping breaks, the UI still serves yesterday's data.
 
-## Accounts & multi-user scoping
+## Anonymous identity & per-visitor scoping
 
-Public signup (`/signup`, `/login`, `/logout` in `app/main.py`; password
-hashing + session-cookie identity in `app/auth.py` — no separate sessions
-table, the cookie itself carries `{"user_id": ...}`, signed via
-`SLOSHBOT_SECRET_KEY`). Every HTML route depends on `require_user_html`
-(redirects signed-out visitors to `/login?next=...`); every JSON/write route
-depends on `require_user_api` (401, since a redirect would just confuse a
-`fetch()` caller).
+There is no login, no signup, no password, no email. On a visitor's first
+request, `app/auth.py`'s `current_user(request)` dependency mints a random
+`uuid4` id, stores it in the signed session cookie (Starlette's
+`SessionMiddleware`, `max_age` set to 400 days so the identity survives
+browser restarts, signed via `SLOSHBOT_SECRET_KEY`), and inserts a `users` row
+with NULL `email`/`password_hash` to give per-user writes a valid foreign key.
+Every route — HTML and JSON/write alike — depends on `current_user`; there's
+no html-vs-api split anymore, no redirects, no 401. Every visitor always has
+an identity from their very first request.
 
-**What's shared vs. per-user is a deliberate split, not an accident:**
+**What's shared vs. per-visitor is a deliberate split, not an accident:**
 
-| Scoped per-user | Shared / crowdsourced across everyone |
+| Scoped per-visitor | Shared / crowdsourced across everyone |
 |---|---|
 | `settings` (home address, included_tags/sources, price_filter) | `events`, `scores`, `event_tags` — the catalog itself |
-| `feedback` — *your* went/skipped/as-promised taps (drives card button state) | host reputation — `_host_reputation()` in `booze.py` aggregates **every** user's feedback for a host, not just yours; it gets more accurate as more people use the app |
+| `feedback` — *your* went/skipped/as-promised taps (drives card button state) | host reputation — `_host_reputation()` in `booze.py` aggregates **every** visitor's feedback for a host, not just yours; it gets more accurate as more people use the app |
 | `holds` — *your* calendar holds (drives *your* morning-after debrief) | `geocode_cache` — an address string → lat/lon lookup, safe to share |
 
 `app/data.py::fetch_events(start, end, user_id)` is where this split actually
@@ -106,24 +109,28 @@ happens: the per-event `feedback` set it attaches is filtered to `user_id`, but
 the `host_rep` it attaches is computed from an unfiltered join — same function,
 two different scoping rules, on purpose.
 
-Pre-multi-user installs migrate automatically and losslessly: `db.py`'s
-`init_db()` detects the old unscoped `settings`/`feedback`/`holds` shape and
-rescopes every existing row to a stable `LEGACY_USER_ID` ("legacy") account.
-Nothing is deleted. Once the site owner signs up for a real account,
-`db.reassign_legacy_user(new_user_id)` moves that data onto it (one-time,
-idempotent — a second call is a no-op since the legacy rows will already be
-gone).
+The `users` table's `email` and `password_hash` columns are nullable — NULL is
+the norm now, for every anonymous user. Pre-multi-user installs still migrate
+automatically and losslessly: `db.py`'s `init_db()` detects the old unscoped
+`settings`/`feedback`/`holds` shape and rescopes every existing row to a
+stable `LEGACY_USER_ID` ("legacy") account, with sentinel `email`/
+`password_hash` values (`'legacy@local'` / `'!'`) left over from before those
+columns were nullable. Nothing is deleted. The app also went through a brief
+password-accounts era between the pre-accounts world and today's anonymous
+identity; that era's signed-up rows (real email + bcrypt hash) are now
+orphaned — no login exists to reach them anymore — but they're harmless dead
+rows, not worth a migration to clean up.
 
 ## App layering & the frontend seam
 
 The web app is split into single-responsibility layers with one directed read
-flow. The HTTP layer (`app/main.py`) is thin: it authenticates the caller, then
-composes the read pipeline and either renders Jinja OR serializes JSON — the
-SAME data either way.
+flow. The HTTP layer (`app/main.py`) is thin: it resolves the caller's
+anonymous identity, then composes the read pipeline and either renders Jinja
+OR serializes JSON — the SAME data either way.
 
 ```
                          ┌───────────────────────── app/main.py (FastAPI) ─────────────────────────┐
-  browser / client  ───▶ │  auth.require_user_html / require_user_api  →  user_id                  │
+  browser / client  ───▶ │  auth.current_user  →  user_id                                          │
                          │        │                                                                 │
                          │  GET /  /week  /calendar  /map          GET /api/events  /api/counts     │
                          │        │  (HTML via Jinja templates)            │  (JSON via Event.to_dict)│
@@ -146,13 +153,13 @@ SAME data either way.
 | Module | Owns | A frontend rewrite… |
 |---|---|---|
 | `models.py` | `Event` — field contract + `to_dict()` JSON shape | **consumes** (it's the API payload) |
-| `auth.py` | password hashing, session-cookie identity, `require_user_html`/`require_user_api` | never touches (a client app still needs the session cookie or an equivalent) |
+| `auth.py` | anonymous cookie identity, `current_user` dependency | never touches (a client app still needs the session cookie or an equivalent) |
 | `data.py` | the only read-path SQL → `Event`; every function takes `user_id` | never touches |
 | `presenter.py` | datetimes, distance, gcal link, **calendar geometry** (`layout_day`) | consumes dt/distance/gcal via API; see calendar note below |
 | `filters.py` | hard filters + `chip_counts` | consumes counts; see filter-state note |
 | `policy.py` | composite/tier rollup, source demotion, per-day `MAX_PICKS` cap | consumes `tier`/`composite` |
-| `main.py` | routes only — auth + compose + render/serialize + write paths | **replace** the HTML routes; keep auth + the API + write paths |
-| `templates/` | Jinja HTML, client JS, design tokens (incl. `login.html`/`signup.html`) | **replace entirely** except the auth flow's semantics |
+| `main.py` | routes only — identity + compose + render/serialize + write paths | **replace** the HTML routes; keep identity + the API + write paths |
+| `templates/` | Jinja HTML, client JS, design tokens | **replace entirely** except the identity cookie's semantics |
 
 Ranking *primitives* (`composite`, `tier`, thresholds, `LENSES`, `LENS_META`)
 live in `scoring/weights.py`; the `MAX_PICKS` scarcity cap is a *presentation*
@@ -163,11 +170,6 @@ plus its scorer, not copy-pasted markup.
 ## HTTP surface
 
 ```
-AUTH   GET/POST /signup      email + password + password_confirm → session cookie
-       GET/POST /login       email + password (+ ?next=)         → session cookie
-       POST     /logout      clear the session                   → 303 /login
-         (signed-out visitors hit require_user_html → 303 /login?next=...;
-          signed-out API/write calls hit require_user_api → 401 JSON)
 HTML   GET /                 hero "tonight's pick" + backups + rest-of-week
        GET /week             7-day digest, grouped by day, tiered
        GET /calendar         week grid (uses presenter.layout_day)
@@ -180,14 +182,16 @@ WRITE  POST /feedback/{event_id}/{verdict}?lens=   toggle YOUR verdict → {ok, 
        POST /settings/tags|sources|price/toggle    flip YOUR filter → {ok, state}
        POST /settings/tags|sources|price/clear     clear YOUR filter dimension
        POST /settings/home  (form: home_address)   save + geocode YOUR home → 303 redirect
-         (every write above is scoped to the session's user_id — see Accounts above)
+         (every write above is scoped to the visitor's anonymous user_id — see
+          Anonymous identity above)
 ```
 
 `Event.to_dict()` already carries everything a view needs: base fields, `scores`
 & `rationales` (keyed by scorer), `tags`, `feedback` (the CALLING user's own
 verdicts), `host_rep` (shared across every user), `composite`, `tier`,
-`distance_mi`, `gcal`, and ISO `start_dt`/`end_dt`. So the read side of a client
-frontend needs **no new backend logic** — just the session cookie + `/api/events`.
+`distance_mi`, `gcal`, and ISO `start_dt`/`end_dt`. The session cookie carries
+the anonymous id; the read side of a client frontend needs **no new backend
+logic** — just `/api/events`.
 
 ## Rewriting the frontend (React or similar)
 
@@ -199,9 +203,9 @@ the visual contract. The HTML routes in `main.py` (`home`, `week`, `calendar`,
 `map_view`) get deleted or reduced to serving the SPA shell.
 
 **Keep / don't touch:** `auth.py`, `data.py`, `filters.py`, `policy.py`,
-`models.py`, `scoring/`, and the auth + `/api/*` + write routes. That's the
+`models.py`, `scoring/`, and the identity + `/api/*` + write routes. That's the
 whole backend the client talks to — a client app still needs to carry the
-session cookie (or swap in a bearer-token variant of `require_user_api`).
+session cookie (or swap in a bearer-token variant of `current_user`).
 
 **Three decisions the rewrite must make** (seams exist; pick a side):
 
@@ -276,13 +280,20 @@ CREATE TABLE event_tags (
 );
 
 -- events/scores/event_tags above are the shared, crowdsourced catalog — every
--- table below this line is scoped to a signed-up user.
+-- table below this line is scoped to a visitor.
 
+-- One row per visitor. Identity is anonymous: no login/password, no PII — a
+-- random id is minted into a signed session cookie on first visit (see
+-- app.auth.current_user) and mirrored here as the FK target for their
+-- per-user state.
 CREATE TABLE users (
   id            TEXT PRIMARY KEY,  -- uuid4 hex; LEGACY_USER_ID ("legacy") for
                                     --   data migrated from a pre-accounts DB
-  email         TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,     -- bcrypt; "!" is the legacy user's unusable sentinel
+  email         TEXT UNIQUE,       -- NULL for anonymous users (the norm now)
+  password_hash TEXT,              -- NULL for anonymous users; the legacy
+                                    --   user row may still carry the old "!"
+                                    --   sentinel from before this column was
+                                    --   nullable
   created_at    TEXT NOT NULL
 );
 
@@ -362,13 +373,8 @@ just flagged.
 - No Partiful (no public discovery surface; revisit via Gmail invite parsing).
 - No unit tests; instead a hand-labeled golden set (~10 events) to eyeball
   scorer changes against.
-- No email verification / password reset flow on signup yet — an account is
-  just an email + password, no confirmation loop. Fine for now; a real reset
-  flow needs outbound email, which the app doesn't send anywhere else either.
-- No per-account rate limiting / abuse controls on `/signup` — acceptable for
-  a small-scale share-the-link launch, revisit before wider distribution.
 
-**No longer exclusions (were v1 cuts, since built):** auth/multi-user (see
-Accounts above); feedback IS consumed, by `_host_reputation()` in
-`booze.py`, aggregated across every user; cross-source dedup auto-merges,
-it doesn't just flag.
+**No longer exclusions (were v1 cuts, since built):** multi-user scoping (see
+Anonymous identity above) — identity is now anonymous, no accounts at all;
+feedback IS consumed, by `_host_reputation()` in `booze.py`, aggregated
+across every user; cross-source dedup auto-merges, it doesn't just flag.

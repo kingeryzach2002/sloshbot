@@ -34,13 +34,16 @@ CREATE TABLE IF NOT EXISTS scores (
   PRIMARY KEY (event_id, scorer)
 );
 
--- One row per signed-up person. The event catalog (events/scores/event_tags)
--- is shared and crowdsourced across everyone — only preferences and personal
--- state (settings/feedback/holds below) are scoped per-user.
+-- One row per visitor. Identity is anonymous: no login/password, no PII — a
+-- random id is minted into a signed session cookie on first visit (see
+-- app.auth.current_user) and mirrored here as the FK target for their
+-- per-user state. The event catalog (events/scores/event_tags) is shared and
+-- crowdsourced across everyone — only preferences and personal state
+-- (settings/feedback/holds below) are scoped per-user.
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
-  email         TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
+  email         TEXT UNIQUE,          -- NULL for anonymous users (the norm now)
+  password_hash TEXT,                 -- NULL for anonymous users
   created_at    TEXT NOT NULL
 );
 
