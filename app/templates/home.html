@@ -47,82 +47,10 @@
   }
 
   /* =====================================================================
-     C · TACTILE — "The Coaster" card system (the only direction this
-     view uses; ported verbatim from design_day.html's shared block).
+     C · TACTILE — "The Coaster" card system now lives in the shared
+     _components.html (included via _theme.html); this view only keeps
+     its own overrides below (elevation ramp, hero/day-specific chrome).
      ===================================================================== */
-  .ta-card { position: relative; border-radius: 16px; padding: 18px 18px 16px;
-             background:
-               var(--grain),
-               radial-gradient(120% 80% at 50% -10%, var(--sheen), transparent 60%),
-               linear-gradient(180deg, var(--surf-hi), var(--surf-lo));
-             border: 1px solid var(--line);
-             box-shadow: var(--elev-rest);
-             transition: transform .2s var(--ease), box-shadow .3s var(--ease); }
-  .ta-card:hover { transform: translateY(-3px);
-             box-shadow: var(--elev-hover); }
-  .ta-card:active { transform: translateY(0);
-             box-shadow: var(--elev-press); }
-  .ta-card.confident {
-             background:
-               var(--grain),
-               radial-gradient(120% 90% at 50% -10%, var(--sheen-c), transparent 60%),
-               linear-gradient(180deg, var(--surf-hi), var(--surf-lo));
-             border-color: var(--gold-dim);
-             box-shadow: var(--elev-glow-rest); }
-  .ta-top { display: flex; align-items: flex-start; gap: 14px; }
-  .ta-title { flex: 1; min-width: 0; font-family: var(--serif); font-weight: 600;
-              font-size: 19px; line-height: 1.08; letter-spacing: -0.01em;
-              text-wrap: balance; }
-  .ta-card.confident .ta-title { font-size: 25px; }
-  .ta-title a { color: var(--text); text-decoration: none; transition: color .15s; }
-  .ta-title a:hover { color: var(--gold); }
-  .coupe { --p: 0; position: relative; width: 40px; height: 40px; flex: none; }
-  .coupe .glass { position: absolute; top: 4px; bottom: 8px; left: 50%; width: 34px;
-                  transform: translateX(-50%); overflow: hidden;
-                  border: 1.5px solid var(--gold-dim); border-top: none;
-                  border-radius: 0 0 40px 40px; background: rgba(0,0,0,0.25); }
-  .coupe.dim .glass { border-color: var(--line2); }
-  .coupe .liq { position: absolute; left: 0; right: 0; bottom: 0;
-                height: calc(var(--p) * 1%); background: var(--gold); opacity: 0.85;
-                transition: height .6s var(--ease); }
-  .coupe.dim .liq { background: var(--faint); opacity: 0.6; }
-  .coupe .stem { position: absolute; left: 50%; bottom: 2px; width: 1.5px; height: 8px;
-                 background: var(--gold-dim); transform: translateX(-50%); }
-  .coupe .foot { position: absolute; left: 50%; bottom: 1px; width: 18px; height: 1.5px;
-                 background: var(--gold-dim); transform: translateX(-50%); }
-  .coupe.dim .stem, .coupe.dim .foot { background: var(--line2); }
-  .ta-meta { color: var(--meta); font-size: 12.5px; margin-top: 7px; letter-spacing: 0.005em;
-             font-variant-numeric: oldstyle-nums proportional-nums; }
-  .ta-meta .free { color: var(--green); }
-  .ta-meta .rep { color: var(--green); }
-  .ta-why { font-family: var(--serif); font-style: italic; font-weight: 400;
-            font-size: 15px; line-height: 1.42; color: var(--muted); margin: 10px 0 2px;
-            max-width: 40ch; text-wrap: pretty; }
-  .ta-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
-  .ta-tags { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; }
-  .ta-tags span { font-size: 11px; color: var(--muted); background: var(--card2);
-                  border: 1px solid var(--line2); border-radius: 99px; padding: 2px 9px; }
-  .ta-hold { font-size: 12.5px; font-weight: 650; color: var(--bg); background: var(--gold);
-             border: none; border-radius: 8px; padding: 7px 14px; cursor: pointer;
-             box-shadow: 0 3px 0 var(--gold-press), 0 6px 12px -6px rgba(0,0,0,0.8);
-             transition: transform .1s var(--ease), box-shadow .1s var(--ease); }
-  .ta-hold:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--gold-press), 0 8px 14px -6px rgba(0,0,0,0.8); }
-  .ta-hold:active { transform: translateY(3px); box-shadow: 0 0 0 var(--gold-press), 0 2px 6px -4px rgba(0,0,0,0.8); }
-  .ta-hold:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-  .ta-stamp-row { display: flex; align-items: center; gap: 8px; margin-top: 13px;
-                  padding-top: 12px; border-top: 1px solid var(--line); }
-  .ta-stamp-row .q { font-size: 10px; color: var(--faint); text-transform: uppercase;
-                     letter-spacing: 0.11em; }
-  .ta-stamp { font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
-              text-transform: uppercase; color: var(--muted); background: none;
-              border: 1px solid var(--line2); border-radius: 4px; padding: 3px 9px;
-              cursor: pointer; transition: transform .12s var(--ease), color .15s, border-color .15s; }
-  .ta-stamp:hover { color: var(--text); border-color: var(--gold-dim); }
-  .ta-stamp:active { transform: scale(0.9) rotate(-3deg); }
-  .ta-stamp:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-  .ta-stamp.stamped { color: var(--green); border-color: var(--green);
-                      transform: rotate(-5deg); opacity: 0.9; }
-  .ta-stamp.stamped.miss { color: var(--red); border-color: var(--red); }
 
   .note { color: var(--faint); font-size: 12px; margin-top: 28px; text-align: center;
           font-style: italic; }
