@@ -26,6 +26,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--all", action="store_true",
                     help="include past events (default: only upcoming, to save cost)")
+    ap.add_argument("--regenerate", action="store_true",
+                    help="reprocess events that ALREADY have a blurb, overwriting them "
+                         "(default: only fill rows where blurb IS NULL)")
     ap.add_argument("--limit", type=int, default=None,
                     help="cap the number of events processed (for testing)")
     args = ap.parse_args()
@@ -33,7 +36,9 @@ def main():
     with get_conn() as conn:
         ensure_blurb_column(conn)
 
-    where = ["s.scorer = 'booze'", "s.blurb IS NULL"]
+    where = ["s.scorer = 'booze'"]
+    if not args.regenerate:
+        where.append("s.blurb IS NULL")
     if not args.all:
         where.append("e.starts_at >= datetime('now')")
     sql = (f"""SELECT e.id, e.title, e.host_name, e.venue_name, e.neighborhood, e.description
@@ -46,8 +51,8 @@ def main():
     with get_conn() as conn:
         rows = [dict(r) for r in conn.execute(sql)]
 
-    print(f"Backfilling blurbs for {len(rows)} booze scores "
-          f"({'all events' if args.all else 'upcoming only'})...")
+    print(f"{'Regenerating' if args.regenerate else 'Backfilling'} blurbs for {len(rows)} "
+          f"booze scores ({'all events' if args.all else 'upcoming only'})...")
 
     done = 0
     with get_conn() as conn:

@@ -14,14 +14,25 @@ MODEL = "claude-haiku-4-5-20251001"
 # Shared spec for the italic serif standfirst line on cards. Kept in ONE place
 # so the in-scoring call (_llm) and the standalone backfill call (generate_blurb)
 # ask for exactly the same thing.
-BLURB_INSTRUCTION = """Also write a "blurb": one clean, concrete sentence describing WHAT THE EVENT IS and its texture/vibe. Rules:
-- Present tense. Max ~120 characters. One sentence.
-- Say what actually happens and how it feels — prefer specific nouns over hype.
+BLURB_INSTRUCTION = """Also write a "blurb": one short, concrete phrase describing WHAT THE EVENT IS. Rules:
+- HARD LENGTH LIMIT: at most 90 characters (about 8-14 words). Shorter is better. A single clause, NOT an elaborate multi-part sentence. Do not pad to reach the limit.
+- Present tense. Say what actually happens — prefer specific nouns over hype.
 - Do NOT mention free drinks, booze, an open bar, or any probability/odds (a separate line handles that).
 - Do NOT mention ticket price, and no "RSVP" / "Join us" / marketing boilerplate.
 - No trailing ellipsis.
 - If the description is empty or useless, infer a plain blurb from the title, venue, and neighborhood.
-It should read like a knowing one-line event description."""
+Length + voice target (match the LENGTH, not the content): "Y Combinator S26 founders get professional headshots at Corgi Cafe while meeting their batch"."""
+
+# Hard backstop: the model sometimes overshoots the char limit, so clip to the
+# last full word within `limit` (no ellipsis — a clean phrase, not a cut-off).
+def _clip_blurb(text: str | None, limit: int = 95) -> str | None:
+    if not text:
+        return None
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:—-")
+    return cut or text[:limit]
 
 # (pattern, score-if-matched, label). First strong match anchors the heuristic.
 # "Alcohol is present" and "alcohol is free" are different claims — a bar venue
@@ -93,7 +104,7 @@ Reply with ONLY a JSON object: {{"score": <float>, "rationale": "<one sentence, 
         s = float(data["score"])
         blurb = data.get("blurb")
         return {"score": max(0.0, min(1.0, s)), "rationale": str(data["rationale"]),
-                "blurb": str(blurb).strip() if blurb else None}
+                "blurb": _clip_blurb(str(blurb) if blurb else None)}
     except Exception as e:
         print(f"  booze LLM failed for {event['id']}: {e} — using heuristic")
         return None
@@ -128,7 +139,7 @@ Reply with ONLY a JSON object: {{"blurb": "<the one-sentence event blurb>"}}"""
         text = resp.content[0].text.strip()
         text = re.sub(r"^```(json)?|```$", "", text, flags=re.M).strip()
         blurb = json.loads(text).get("blurb")
-        return str(blurb).strip() if blurb else None
+        return _clip_blurb(str(blurb) if blurb else None)
     except Exception as e:
         print(f"  blurb generation failed for {event.get('id')}: {e}")
         return None
