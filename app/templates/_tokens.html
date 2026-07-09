@@ -1,0 +1,131 @@
+{#
+  sloshbot design tokens — the single source of truth for the visual system.
+  Include this once in every page's <head>:  {% include "_tokens.html" %}
+  Then build components using var(--token) names only; never hardcode a hex,
+  size, radius, or shadow in a page. Change the look here, everywhere updates.
+
+  This is the "Brass & Oxblood" speakeasy system decided in the design lab
+  (see DESIGN.md for the why behind every value). Fonts load from Google
+  Fonts here (light); the prototype inlines them, production doesn't need to.
+#}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400;1,9..144,600&family=Hanken+Grotesk:wght@400..700&display=swap">
+<style>
+  :root {
+    /* ============================================================
+       COLOR — one warm temperature. Value carries readability,
+       hue/chroma carry mood. Text tiers are pinned to measured
+       contrast (AA); never darken a text token to "tone it down".
+       ============================================================ */
+    /* ground (warm near-blacks, brown-biased not grey) */
+    --bg:      #0f0908;   /* page */
+    --card:    #170f0c;   /* card surface */
+    --card2:   #201512;   /* raised surface: inputs, chips, popovers */
+    /* text ladder — measured on --card: 15:1 / 9:1 / 7:1 / 5:1, all AA */
+    --text:    #efe4d6;   /* primary text */
+    --muted:   #b49c86;   /* secondary text */
+    --faint:   #96806d;   /* labels, captions, tertiary */
+    --meta:    #c8af99;   /* dateline/meta text (warm, NOT cool sage) */
+    /* structure */
+    --line:    #2c2019;   /* hairline borders */
+    --line2:   #3d2b22;   /* border hover / meter track */
+    /* accent — brass, spent scarcely (the one "lit" color) */
+    --gold:       #d0a04a;
+    --gold-dim:   #8a6733;                    /* dim rims, marginal rules */
+    --gold-press: #9a7126;                    /* pressed edge of a gold key */
+    --gold-glow:  rgba(208,160,74,0.12);      /* the "lit from within" glow */
+    /* semantic (from the material world, not stock success/error) */
+    --green: #93a05a;    /* free / positive */
+    --red:   #c26a5f;    /* oxblood — negative / "no booze" */
+
+    /* ============================================================
+       TYPE — three roles, one job each:
+         Fraunces ROMAN  = names (titles, day headers)
+         Fraunces ITALIC = "the voice" (the pitch/blurb) — reserved
+         Hanken Grotesk  = everything functional (body, meta, UI)
+       Datelines use oldstyle figures; align digits with tabular-nums.
+       ============================================================ */
+    --serif: "Fraunces", Georgia, serif;
+    --sans:  "Hanken Grotesk", -apple-system, "Segoe UI", Helvetica, sans-serif;
+    --mono:  ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    /* scale (perfect-fourth-ish; size carries the tier) */
+    --fs-title-lg: 25px;   /* confident card title */
+    --fs-title:    19px;   /* maybe card title */
+    --fs-dayhead:  17.5px; /* day header (Fraunces roman) */
+    --fs-body:     15px;   /* body / the italic blurb */
+    --fs-meta:     12.5px; /* dateline, verbal read */
+    --fs-label:    10.5px; /* uppercase tracked micro-labels */
+
+    /* ============================================================
+       SPACE — 4px rhythm. Compose layouts with gap, not margins.
+       ============================================================ */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;   /* card padding */
+    --gap-card: 18px;  /* between stacked cards (generous, deliberate) */
+
+    /* ============================================================
+       RADIUS — "soft coaster" scale. Four values, nothing else
+       (the coupe drawing and circular thumbs are exempt).
+       ============================================================ */
+    --r-card:    16px;   /* cards, popovers, empty state */
+    --r-control: 8px;    /* buttons / keys / segments */
+    --r-stamp:   4px;    /* rubber stamps (cut rubber, not molded) */
+    --r-pill:    99px;   /* chips, tags, slider track */
+
+    /* ============================================================
+       BORDERS — 1px hairline everywhere. 1.5px is reserved
+       exclusively for the coupe glass drawing.
+       ============================================================ */
+    --stroke: 1px;
+
+    /* ============================================================
+       ELEVATION — one light source (from above): inset top sheen +
+       downward drop shadow. Confident cards add a gold glow.
+       ============================================================ */
+    --sheen:   rgba(237,230,218,0.05);  /* warm top-light on a surface */
+    --sheen-c: rgba(208,160,74,0.14);   /* gold spill on the lit pick */
+    --elev-rest:  0 1px 0 var(--sheen) inset,
+                  0 14px 28px -18px rgba(0,0,0,0.9);
+    --elev-hover: 0 1px 0 rgba(237,230,218,0.07) inset,
+                  0 22px 40px -20px rgba(0,0,0,0.95);
+    --elev-press: 0 1px 0 rgba(237,230,218,0.04) inset,
+                  0 8px 18px -14px rgba(0,0,0,0.9);
+    --elev-glow-rest:  0 1px 0 var(--sheen-c) inset,
+                       0 0 22px -6px var(--gold-glow),
+                       0 14px 28px -18px rgba(0,0,0,0.9);
+    --elev-glow-hover: 0 1px 0 var(--sheen-c) inset,
+                       0 0 30px -6px var(--gold-glow),
+                       0 22px 40px -20px rgba(0,0,0,0.95);
+    --elev-glow-press: 0 1px 0 var(--sheen-c) inset,
+                       0 0 18px -6px var(--gold-glow),
+                       0 8px 18px -14px rgba(0,0,0,0.9);
+    --elev-pop: 0 16px 30px -12px rgba(0,0,0,0.9);  /* popovers */
+
+    /* ============================================================
+       MOTION — one easing curve everywhere (a slight overshoot is
+       the app's "personality"). Put it on every transform transition.
+       ============================================================ */
+    --ease: cubic-bezier(0.2, 0.9, 0.3, 1.15);
+
+    /* ============================================================
+       TEXTURE — whisper grain. A 64px noise tile at 0.03 opacity,
+       layered UNDER content on card surfaces (never as a filter).
+       ============================================================ */
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='64' height='64' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+
+  /* Two-tier PRESS SYSTEM — the rule for anything interactive:
+       SURFACES (cards) .......... lift on hover, settle on press (--elev-*)
+       KEYS (primary buttons) .... depress hard (gold-press edge shadow)
+       STAMPS (verdict/toggle) ... press-and-rotate a few degrees
+       FLAT (chips/tags/segments)  color/border change + tiny scale, no shadow
+     Respect prefers-reduced-motion: reduce for all of the above. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important;
+      transition-duration: .001ms !important; }
+  }
+</style>

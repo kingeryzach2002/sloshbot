@@ -7,24 +7,246 @@
 <title>sloshbot</title>
 {% include "_theme.html" %}
 <style>
-  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
-  .sub { color: var(--faint); margin: 0 0 22px; font-size: 12px; }
-  h2.day { font-family: var(--serif); font-style: italic; font-weight: 600;
-           font-size: 18px; color: var(--text); letter-spacing: 0;
-           border-bottom: 1px solid var(--line); padding-bottom: 7px; margin: 30px 0 12px; }
-  h2.day .d { color: var(--faint); font-size: 13px; font-style: normal;
-              font-family: -apple-system, "Segoe UI", sans-serif; }
-  details.maybe-section > summary { cursor: pointer; color: var(--faint); font-size: 12px;
-    text-transform: uppercase; letter-spacing: 0.08em; margin: 10px 0;
-    transition: color .15s; }
-  details.maybe-section > summary:hover { color: var(--muted); }
+  /* ============================================================
+     real-page additions: filter bar, sticky day headers,
+     progressive card disclosure, material system tokens.
+
+     PRESS SYSTEM (the four classes of touch):
+       SURFACES (cards)       lift softly — hover translateY(-3px) +
+                              elevated shadow; active settles back to 0.
+       KEYS (ta-hold)         depress hard — 3D gold-press edge collapses.
+       STAMPS (ta-stamp, the free toggle) press-and-rotate.
+       FLAT (chips, tags, seg buttons, popover triggers)
+                              color/border change only, tiny scale on
+                              active, never any shadow.
+     ONE LIGHT SOURCE: above. Shadows are inset top sheens + downward
+     drops only; gold glows are the "lit from within" confident identity.
+     RADII: 16 (cards, popovers, empty state) / 8 (buttons) /
+            4 (stamps, meter segments) / 99 (pills). Coupe drawing and
+     circular thumbs are shape-exempt.
+     ============================================================ */
+  .lab {
+    /* elevation ramp — the only shadow literals on card surfaces */
+    --elev-rest: 0 1px 0 var(--sheen) inset,
+                 0 14px 28px -18px rgba(0,0,0,0.9);
+    --elev-hover: 0 1px 0 rgba(237,230,218,0.07) inset,
+                  0 22px 40px -20px rgba(0,0,0,0.95);
+    --elev-press: 0 1px 0 rgba(237,230,218,0.04) inset,
+                  0 8px 18px -14px rgba(0,0,0,0.9);
+    --elev-glow-rest: 0 1px 0 var(--sheen-c) inset,
+                      0 0 22px -6px var(--gold-glow),
+                      0 14px 28px -18px rgba(0,0,0,0.9);
+    --elev-glow-hover: 0 1px 0 var(--sheen-c) inset,
+                       0 0 30px -6px var(--gold-glow),
+                       0 22px 40px -20px rgba(0,0,0,0.95);
+    --elev-glow-press: 0 1px 0 var(--sheen-c) inset,
+                       0 0 18px -6px var(--gold-glow),
+                       0 8px 18px -14px rgba(0,0,0,0.9);
+    --elev-pop: 0 16px 30px -12px rgba(0,0,0,0.9);
+    /* whisper grain: 64px feTurbulence tile at 0.03 — look for it or miss it */
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='64' height='64' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  #real { max-width: 720px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
+  .day { margin-top: 28px; }
+  .day:first-of-type { margin-top: 0; }
+  .stack { display: grid; gap: 18px; }
+  /* grid items default to min-width:auto — nowrap meta/why lines would widen the
+     card past the column instead of ellipsizing; force them shrinkable */
+  .stack > .ta-card { min-width: 0; max-width: 100%; }
+
+  /* confident keeps its glow through the whole lift (decision 6) */
+  .ta-card.confident:hover { box-shadow: var(--elev-glow-hover); }
+  .ta-card.confident:active { box-shadow: var(--elev-glow-press); }
+
+  /* ---- ROW 2: the per-view control bar, pinned just under the sticky
+     site header (ROW 1). ---- */
+  .fb { position: sticky; top: var(--hdr-h); z-index: 30; background: rgba(15,9,8,0.86);
+        -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--line2); }
+  .fb .wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+              row-gap: 8px; padding: 12px 20px; box-sizing: border-box; }
+
+  .fb-ctl { display: flex; align-items: center; gap: 8px; }
+  .fb-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+            color: var(--faint); white-space: nowrap; }
+
+  /* the filter group wraps as ONE unit — never splits mid-group */
+  .fb-filters { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+                flex: none; }
+
+  /* threshold — the signature control. Native range input:
+     thumb = the gold liquid disc itself (no ring), radius tracks --p. */
+  .thresh { flex: 1 1 200px; min-width: 160px; max-width: 300px; }
+  .thresh-range { --p: 65; -webkit-appearance: none; appearance: none; flex: 1;
+                  height: 24px; margin: 0; min-width: 0; background: transparent;
+                  cursor: pointer; }
+  .thresh-range::-webkit-slider-runnable-track { height: 2px; border-radius: 99px;
+                  background: linear-gradient(to right,
+                    var(--gold) calc(var(--p) * 1%), var(--line2) calc(var(--p) * 1%)); }
+  .thresh-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+                  width: 18px; height: 18px; margin-top: -8px; border-radius: 50%;
+                  border: none;
+                  background: radial-gradient(circle closest-side,
+                    var(--gold) calc(var(--p) * 1%),
+                    transparent calc(var(--p) * 1% + 2%));
+                  box-shadow: 0 2px 7px -1px rgba(0,0,0,0.85); }
+  .thresh-range::-moz-range-track { height: 2px; border-radius: 99px; background: var(--line2); }
+  .thresh-range::-moz-range-progress { height: 2px; border-radius: 99px; background: var(--gold); }
+  .thresh-range::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%;
+                  border: none; box-sizing: border-box;
+                  background: radial-gradient(circle closest-side,
+                    var(--gold) calc(var(--p) * 1%),
+                    transparent calc(var(--p) * 1% + 2%));
+                  box-shadow: 0 2px 7px -1px rgba(0,0,0,0.85); }
+  .thresh-range:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px;
+                  border-radius: 4px; }
+  .thresh-read { font-variant-numeric: tabular-nums; color: var(--gold); font-size: 13px;
+                 font-weight: 600; width: 34px; text-align: right; flex: none; }
+
+  /* distance stepper — FLAT controls in the seg material */
+  .fb-seg { display: inline-flex; gap: 2px; background: var(--card2);
+            border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
+  .fb-seg button { font: inherit; font-family: var(--mono); font-size: 11.5px;
+            font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer;
+            background: none; border: none; border-radius: 8px; padding: 4px 7px;
+            transition: color .18s, background .3s var(--ease),
+                        transform .12s var(--ease); }
+  .fb-seg button i { font-style: normal; }
+  .fb-seg button:hover { color: var(--text); }
+  .fb-seg button:active { transform: scale(0.96); }
+  .fb-seg button[aria-current="true"] { background: var(--gold); color: var(--bg); }
+  .fb-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* free toggle — a STAMP: press-and-rotate */
+  .fb-stamp { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; flex: none;
+              transition: transform .12s var(--ease), color .15s, border-color .15s; }
+  .fb-stamp:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-stamp:active { transform: scale(0.94) rotate(-2deg); }
+  .fb-stamp:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-stamp[aria-pressed="true"] { color: var(--gold); border-color: var(--gold);
+              transform: rotate(-3deg); }
+
+  /* chip popovers (tags, source) — triggers are FLAT */
+  .fb-pop { position: relative; flex: none; }
+  .fb-pop-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; white-space: nowrap;
+              transition: color .15s, border-color .15s, transform .12s var(--ease); }
+  .fb-pop-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-pop-btn:active { transform: scale(0.96); }
+  .fb-pop-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-pop-btn.active { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+              min-width: 200px; max-width: 260px;
+              background-color: var(--card2); background-image: var(--grain);
+              border: 1px solid var(--line2); border-radius: 16px; padding: 10px;
+              box-shadow: var(--elev-pop);
+              display: none; flex-wrap: wrap; gap: 6px; }
+  .fb-panel.open { display: flex; }
+  .fb-chip { font-size: 11px; color: var(--muted); background: var(--card);
+             border: 1px solid var(--line2); border-radius: 99px; padding: 4px 10px;
+             cursor: pointer; transition: color .15s, border-color .15s,
+             transform .12s var(--ease); }
+  .fb-chip:hover { color: var(--text); }
+  .fb-chip:active { transform: scale(0.96); }
+  .fb-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-chip .n { color: var(--faint); margin-left: 4px; }
+  .fb-chip.on { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-chip.on .n { color: var(--gold-dim); }
+
+  /* mobile: keep the bar to (at most) mark+slider row and one tidy
+     controls row — the group never splits mid-group */
+  @media (max-width: 480px) {
+    #real { padding: 0 14px; }
+    .fb .wrap { gap: 10px; padding-left: 14px; padding-right: 14px; }
+    .thresh { min-width: 130px; flex-basis: 130px; }
+    .fb-seg button { padding: 4px 6px; }
+    .fb-seg button i { display: none; }
+    .fb-stamp, .fb-pop-btn { padding: 5px 7px; letter-spacing: 0.08em; }
+    .fb-filters { gap: 5px; }
+  }
+
+  /* ---- sticky day headers, riding just under the filter bar
+         (bar height measured in JS into --fb-h so wrapping stays safe).
+         The header is a full-width TOGGLE that collapses/expands its day. ---- */
+  .dayhead { display: flex; align-items: baseline; gap: 14px; margin: 0 0 12px;
+             flex-wrap: wrap;
+             width: 100%; text-align: left; font: inherit; color: inherit;
+             padding: 10px 0 8px; border: none; border-bottom: 1px solid var(--line2);
+             position: sticky; top: var(--fb-h, 56px); z-index: 20; cursor: pointer;
+             background: rgba(15,9,8,0.92);
+             -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .dayhead:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  /* chevron: down when open, points right when the day is collapsed */
+  .dayhead .chev { align-self: center; width: 8px; height: 8px; flex: none;
+                   border-right: 1.5px solid var(--gold-dim);
+                   border-bottom: 1.5px solid var(--gold-dim);
+                   transform: rotate(45deg); transition: transform .2s var(--ease); }
+  .day.collapsed .dayhead .chev { transform: rotate(-45deg); }
+  .day.collapsed .dayhead { margin-bottom: 0; }
+  .day.collapsed .day-body { display: none; }
+  /* a name, said firmly: Fraunces ROMAN 600 — distinct from the italic
+     wordmark voice and smaller than the 25px card titles */
+  .dayhead .dow { font-family: var(--serif); font-style: normal; font-weight: 600;
+                  font-size: 17.5px; letter-spacing: -0.005em; color: var(--text); }
+  .dayhead .date { font-size: 10.5px; letter-spacing: 0.14em; color: var(--gold-dim);
+                   font-variant-numeric: oldstyle-nums; }
+  .dayhead .cnt { font-size: 11.5px; color: var(--faint);
+                  font-variant-numeric: oldstyle-nums; margin-left: auto;
+                  padding-left: 10px; }
+  .dayhead .cnt b { color: var(--gold-dim); font-weight: 600; }
+
+  .more { margin-top: 16px; }
+  .more[open] > summary { margin-bottom: 8px; }
+  .more .stack { padding-top: 2px; }
+  .more summary { color: var(--faint); font-size: 14px; cursor: pointer;
+                  list-style: none; padding: 6px 0; }
+  .more summary::-webkit-details-marker { display: none; }
+  .more summary:hover { color: var(--muted); }
+
+  /* ---- card: spacing on a 4px scale + progressive disclosure ---- */
+  .ta-card { padding: 16px 16px 16px; cursor: pointer; }
+  .ta-card a, .ta-card button { cursor: pointer; }
+  .ta-meta { margin-top: 8px; white-space: nowrap; overflow: hidden;
+             text-overflow: ellipsis; max-width: 100%; }
+  .ta-why { margin: 12px 0 4px; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; max-width: 100%; }
+  .ta-foot { margin-top: 16px; }
+  .ta-stamp-row { margin-top: 12px; padding-top: 12px; }
+  .ta-raw { color: var(--faint); }
+
+  /* expanded state: full meta + the booze rationale */
+  .ta-more { max-height: 0; overflow: hidden; opacity: 0;
+             transition: max-height .35s var(--ease), opacity .25s; }
+  .ta-card.open .ta-more { max-height: 480px; opacity: 1; }
+  .ta-more-inner { padding-top: 8px; }
+  .ta-meta-full { color: var(--meta); font-size: 12.5px; letter-spacing: 0.005em;
+                  font-variant-numeric: oldstyle-nums proportional-nums; }
+  .ta-meta-full .free { color: var(--green); }
+  .ta-pour { margin-top: 8px; font-size: 12.5px; line-height: 1.45;
+             color: var(--muted); }
+  .ta-pour .q { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+                color: var(--faint); margin-right: 6px; }
+
+  /* fade-in for cards newly revealed by a filter change */
+  @keyframes fb-enter { from { opacity: 0; } to { opacity: 1; } }
+  .ta-card.enter { animation: fb-enter .15s var(--ease); }
+
+  /* empty state */
+  .fb-empty { text-align: center; padding: 64px 0; color: var(--muted);
+              font-size: 13.5px; border-radius: 16px; }
+  .fb-empty .coupe { width: 40px; height: 40px; margin: 0 auto 18px; }
+  .fb-empty small { display: block; margin-top: 6px; color: var(--faint); }
   details.explain { margin-top: 40px; }
   details.explain > summary { cursor: pointer; color: var(--faint); font-size: 12px;
     text-transform: uppercase; letter-spacing: 0.08em; }
 </style>
 </head>
 <body>
-<div class="wrap">
   <header>
     <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
     <nav>
@@ -35,28 +257,452 @@
     </nav>
   </header>
 
-  {% include "_filterbar.html" %}
+  <div class="lab" data-pal="brass">
+    <div class="fb">
+      <div class="wrap">
+        <div class="fb-ctl thresh">
+          <span class="fb-lbl">chance of booze</span>
+          <input type="range" min="0" max="100" step="1" value="65"
+                 class="thresh-range" id="threshRange"
+                 aria-label="minimum booze confidence percent">
+          <span class="thresh-read" id="threshRead">65%</span>
+        </div>
 
-  <div id="page-main">{% include "_main_week.html" %}</div>
-
-  <details class="explain">
-    <summary>how scoring works</summary>
-    <div class="why">
-      Each event gets a <b>&#127864; booze</b> score (0–100), shown as a mark on
-      every card (exact number under "the numbers"): an LLM reads the full
-      event listing and estimates the probability of free drinks, citing its
-      evidence. The five-segment meter is that probability.<br><br>
-      Event-type preference isn't a score — it's the <b>tags</b> filter above.
-      Pick the tags you're interested in and only matching events show
-      up (events with no tags at all are never hidden by it).<br><br>
-      The gold ring on each card is the <b>match</b>: the booze score. A bright,
-      glowing card is a <b>confident</b> pick (≥{{ (scoring_info.confident * 100) | int }},
-      capped at 3 per day); dimmed cards are <b>maybes</b>
-      (≥{{ (scoring_info.maybe * 100) | int }}); anything below is hidden.
-      Thresholds live in <code>scoring/weights.py</code>.
+        <div class="fb-filters">
+          <span class="fb-lbl">filter</span>
+          <div class="fb-seg" id="distSeg" role="group" aria-label="distance cap">
+            <button type="button" data-mi="" aria-current="true">any</button>
+            <button type="button" data-mi="1">1<i>mi</i></button>
+            <button type="button" data-mi="2">2<i>mi</i></button>
+            <button type="button" data-mi="3">3<i>mi</i></button>
+            <button type="button" data-mi="5">5<i>mi</i></button>
+          </div>
+          <button type="button" class="fb-stamp" id="freeToggle" aria-pressed="false">free</button>
+          <div class="fb-pop">
+            <button type="button" class="fb-pop-btn" id="tagsBtn" aria-expanded="false">tags</button>
+            <div class="fb-panel" id="tagsPanel"></div>
+          </div>
+          <div class="fb-pop">
+            <button type="button" class="fb-pop-btn" id="sourceBtn" aria-expanded="false">source</button>
+            <div class="fb-panel" id="sourcePanel"></div>
+          </div>
+        </div>
+      </div>
     </div>
-  </details>
-</div>
-{% include "_feedback.html" %}
+
+    <div class="wrap"><div id="real"></div></div>
+  </div>
+  <script id="events-data" type="application/json">{{ events_json | safe }}</script>
+  <script>
+  (function () {
+    const EVENTS = JSON.parse(document.getElementById("events-data").textContent);
+
+    const state = { thresh: 65, maxMi: null, freeOnly: false, tags: new Set(), sources: new Set() };
+
+    // ---- shared cross-page filter persistence (week / calendar / map) ----
+    // Single JSON object under "slosh.filters"; helpers merge-patch so each
+    // view only writes the field it owns and never clobbers the others.
+    function loadF(){ try { return JSON.parse(localStorage.getItem("slosh.filters")) || {}; } catch(_) { return {}; } }
+    function saveF(patch){ try { localStorage.setItem("slosh.filters", JSON.stringify(Object.assign(loadF(), patch))); } catch(_) {} }
+
+    const f = loadF();
+    if (typeof f.thresh === "number" && f.thresh >= 0 && f.thresh <= 100) state.thresh = f.thresh;
+    if (f.maxMi === null || typeof f.maxMi === "number") state.maxMi = f.maxMi;
+    if (typeof f.free === "boolean") state.freeOnly = f.free;
+    state.tags = new Set(f.tags || []);
+    state.sources = new Set(f.sources || []);
+    const lazyRest = new Map();   // dayKey -> below-threshold events, built on first disclosure open
+
+    // ---- helpers ----
+    function cleanVenue(name) {
+      if (!name) return "";
+      // scraped venue_name sometimes carries a full street address after a comma
+      const idx = name.indexOf(",");
+      return (idx === -1 ? name : name.slice(0, idx)).trim();
+    }
+
+    function fmtTime(iso) {
+      return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    }
+
+    function dayKey(iso) { return iso.slice(0, 10); }
+
+    function fmtDow(iso) {
+      return new Date(iso).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/Los_Angeles" });
+    }
+
+    function fmtDate(iso) {
+      const d = new Date(iso);
+      const mon = d.toLocaleDateString("en-US", { month: "short", timeZone: "America/Los_Angeles" }).toUpperCase();
+      const day = d.toLocaleDateString("en-US", { day: "numeric", timeZone: "America/Los_Angeles" });
+      return mon + " " + day;
+    }
+
+    // wry-bartender read of the booze score — six bands, no gaps, 0..100
+    function boozeRead(n) {
+      if (n >= 90) return "basically an open bar";
+      if (n >= 75) return "probably";
+      if (n >= 60) return "good odds";
+      if (n >= 40) return "coin flip";
+      if (n >= 20) return "bring your own";
+      return "bone dry";
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    // ---- chip popovers (tags + source share one pattern) ----
+    const popovers = [];
+
+    function makeChipPopover(btnId, panelId, labelBase, counts, stateSet, saveKey) {
+      const btn = document.getElementById(btnId);
+      const panel = document.getElementById(panelId);
+      const keys = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
+      panel.innerHTML = keys.map(k =>
+        `<button type="button" class="fb-chip" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
+      ).join("");
+      panel.querySelectorAll(".fb-chip").forEach(chip => {
+        chip.classList.toggle("on", stateSet.has(chip.dataset.key));   // reflect restored selection
+        chip.addEventListener("click", () => {
+          const k = chip.dataset.key;
+          if (stateSet.has(k)) stateSet.delete(k); else stateSet.add(k);
+          chip.classList.toggle("on", stateSet.has(k));
+          updateBtn();
+          saveF({ [saveKey]: [...stateSet] });
+          render();
+        });
+      });
+      updateBtn();   // reflect restored selection count on the trigger button
+      function updateBtn() {
+        if (stateSet.size) {
+          btn.textContent = labelBase + " · " + stateSet.size;
+          btn.classList.add("active");
+        } else {
+          btn.textContent = labelBase;
+          btn.classList.remove("active");
+        }
+      }
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const open = !panel.classList.contains("open");
+        popovers.forEach(p => { p.panel.classList.remove("open"); p.btn.setAttribute("aria-expanded", "false"); });
+        panel.classList.toggle("open", open);
+        btn.setAttribute("aria-expanded", String(open));
+      });
+      popovers.push({ btn, panel });
+    }
+
+    document.addEventListener("click", (ev) => {
+      popovers.forEach(p => {
+        if (!p.panel.contains(ev.target) && ev.target !== p.btn) {
+          p.panel.classList.remove("open");
+          p.btn.setAttribute("aria-expanded", "false");
+        }
+      });
+    });
+
+    const tagCounts = new Map();
+    EVENTS.forEach(e => (e.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+    const sourceCounts = new Map();
+    EVENTS.forEach(e => sourceCounts.set(e.source, (sourceCounts.get(e.source) || 0) + 1));
+
+    // ---- filtering ----
+    // distance: events with unknown (null) distance are never dropped by the cap,
+    // and untagged events are never dropped by the tag filter — both matching
+    // app/main.py's list_events behavior. Every event has a source, so the
+    // source filter is a plain membership test. is_free is a 3-state
+    // 0/1/null field from the backend: only 1 (truthy) counts as free.
+    function passesHardFilters(e) {
+      if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi > state.maxMi) return false;
+      if (state.freeOnly && !e.is_free) return false;
+      if (state.tags.size && (e.tags || []).length && !e.tags.some(t => state.tags.has(t))) return false;
+      if (state.sources.size && !state.sources.has(e.source)) return false;
+      return true;
+    }
+
+    function cardHtml(e) {
+      const confident = e.booze >= state.thresh;
+      const tierClass = confident ? "confident" : (e.booze < 25 ? "maybe low" : "maybe");
+      const dim = confident ? "" : "dim";
+      const venue = cleanVenue(e.venue_name);
+      const read = boozeRead(e.booze);   // tooltip only — no visible label on this view
+      // collapsed: time · venue. The coupe fill carries the booze signal;
+      // the verbal read was removed from the card as unnecessary noise here.
+      const metaShort = [fmtTime(e.starts_at), e.neighborhood ? escapeHtml(e.neighborhood) : (venue ? escapeHtml(venue) : null)]
+        .filter(Boolean).join(" &middot; ");
+      // expanded: the whole dateline
+      const fullParts = [
+        fmtTime(e.starts_at),
+        e.is_free ? '<span class="free">free</span>' : null,
+        (venue || e.neighborhood)
+          ? escapeHtml([venue, e.neighborhood ? `(${e.neighborhood})` : null].filter(Boolean).join(" "))
+          : null,
+        e.host_name ? "by " + escapeHtml(e.host_name) : null,
+        e.rsvp_type ? `<span class="rsvp" style="color:var(--gold-dim)">${escapeHtml(e.rsvp_type)}</span>` : null,
+        e.distance_mi !== null ? e.distance_mi.toFixed(1) + " mi" : null,
+      ].filter(Boolean);
+      const metaFull = fullParts.join(" &middot; ");
+      const tags = (e.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join("");
+      const blurb = escapeHtml(e.blurb || "");
+      const rationale = escapeHtml(e.rationale || "");
+      return `<article class="ta-card ${tierClass} enter" data-id="${escapeHtml(e.id)}">
+        <div class="ta-top">
+          <span class="ta-title"><a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">${escapeHtml(e.title)}</a></span>
+          <span class="coupe ${dim}" style="--p:${e.booze}" title="${read} (${e.booze}%)">
+            <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+          </span>
+        </div>
+        <div class="ta-meta">${metaShort}</div>
+        <p class="ta-why" title="${blurb}">${blurb}</p>
+        <div class="ta-more"><div class="ta-more-inner">
+          <div class="ta-meta-full">${metaFull}</div>
+          <div class="ta-pour"><span class="q">why the pour</span>${rationale}</div>
+        </div></div>
+        <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(e.gcal || '')}">+ calendar</button></div>
+        <div class="ta-stamp-row"><span class="q">any booze?</span>
+          <button class="ta-stamp" data-stamp>yep</button>
+          <button class="ta-stamp miss" data-stamp="miss">nope</button></div>
+      </article>`;
+    }
+
+    function fadeInNew(scope) {
+      requestAnimationFrame(() => {
+        scope.querySelectorAll(".ta-card.enter").forEach(c => setTimeout(() => c.classList.remove("enter"), 160));
+      });
+    }
+
+    // ---- VIRTUALIZATION -------------------------------------------------
+    // dayRecords: dayKey -> { shown[], rest[] }. render() emits only the day
+    // skeletons (header + empty stacks); a day's SHOWN cards are mounted into
+    // its .shown-stack only when the section scrolls near the viewport
+    // (IntersectionObserver, 600px margins) and unmounted when it scrolls far
+    // away, so DOM size tracks what's near the viewport, not event volume.
+    // The below-threshold "less sure" cards stay lazy — built on disclosure open.
+    const dayRecords = new Map();
+    const root = document.getElementById("real");
+    let io = null;
+
+    function mountDay(sec) {
+      if (sec.classList.contains("collapsed")) return;
+      const stack = sec.querySelector(".shown-stack");
+      if (!stack || stack.dataset.mounted) return;
+      const rec = dayRecords.get(sec.dataset.day);
+      if (!rec) return;
+      stack.innerHTML = rec.shown.map(cardHtml).join("");
+      stack.dataset.mounted = "1";
+      stack.style.minHeight = "";   // size to content once mounted
+      fadeInNew(stack);
+    }
+
+    function unmountDay(sec) {
+      const stack = sec.querySelector(".shown-stack");
+      if (!stack || !stack.dataset.mounted) return;
+      // freeze the height first so unmounting doesn't jump the scroll position
+      stack.style.minHeight = stack.offsetHeight + "px";
+      stack.innerHTML = "";
+      delete stack.dataset.mounted;
+    }
+
+    function render() {
+      const byDay = new Map();
+      EVENTS.filter(passesHardFilters).forEach(e => {
+        const k = dayKey(e.starts_at);
+        if (!byDay.has(k)) byDay.set(k, []);
+        byDay.get(k).push(e);
+      });
+
+      if (io) io.disconnect();
+      dayRecords.clear();
+      lazyRest.clear();
+
+      const days = [...byDay.keys()].sort();
+      if (!days.length) {
+        root.innerHTML = `<div class="fb-empty">
+          <div class="coupe dim" style="--p:0">
+            <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+          </div>
+          nothing worth pouring above ${state.thresh}% today
+          <small>ease up on the pour, the radius, or the guest list above.</small>
+        </div>`;
+        syncCollapseAll();
+        return;
+      }
+
+      let html = "";
+      days.forEach(k => {
+        const dayEvents = byDay.get(k);
+        const shown = dayEvents.filter(e => e.booze >= state.thresh);
+        const rest = dayEvents.filter(e => e.booze < state.thresh);
+        const first = dayEvents[0];
+        const n = dayEvents.length;
+        dayRecords.set(k, { shown, rest });
+        if (rest.length) lazyRest.set(k, rest);
+        // days with nothing above the pour auto-collapse (length control)
+        const collapsed = shown.length === 0 ? " collapsed" : "";
+        const expanded = shown.length === 0 ? "false" : "true";
+        const cnt = `<b>${shown.length}</b> shown &middot; ${n} on tap`;
+        const moreHtml = rest.length
+          ? `<details class="more" data-day="${k}"><summary>${rest.length} more, less sure</summary><div class="stack" data-lazy="1"></div></details>`
+          : "";
+        html += `<section class="day${collapsed}" data-day="${k}">`
+              + `<button type="button" class="dayhead" data-dayhead aria-expanded="${expanded}">`
+              + `<span class="chev"></span>`
+              + `<span class="dow">${fmtDow(first.starts_at)}</span>`
+              + `<span class="date">${fmtDate(first.starts_at)}</span>`
+              + `<span class="cnt">${cnt}</span></button>`
+              + `<div class="day-body"><div class="stack shown-stack" data-day="${k}"></div>${moreHtml}</div>`
+              + `</section>`;
+      });
+      root.innerHTML = html;
+
+      // observe each day section; mount/unmount its shown cards as it nears/leaves
+      io = new IntersectionObserver((entries) => {
+        entries.forEach(en => {
+          if (en.isIntersecting) mountDay(en.target);
+          else unmountDay(en.target);
+        });
+      }, { rootMargin: "600px 0px 600px 0px" });
+      root.querySelectorAll(".day").forEach(sec => io.observe(sec));
+
+      // build a day's "less sure" cards the first time its disclosure opens
+      root.querySelectorAll("details.more").forEach(d => {
+        d.addEventListener("toggle", () => {
+          if (!d.open) return;
+          const stack = d.querySelector(".stack[data-lazy]");
+          if (!stack) return;
+          stack.innerHTML = (lazyRest.get(d.dataset.day) || []).map(cardHtml).join("");
+          stack.removeAttribute("data-lazy");
+          fadeInNew(stack);
+        });
+      });
+      syncCollapseAll();
+    }
+
+    // ---- delegated interactions on #real (survive re-render, lazy + virtual
+    //      mounts): day-header collapse, "+ hold", rubber-stamp verdicts
+    //      (optimistic POST /feedback/{id}/{verdict}), tap-to-expand ----
+    root.addEventListener("click", (ev) => {
+      const head = ev.target.closest("[data-dayhead]");
+      if (head) {
+        const sec = head.closest(".day");
+        const collapsed = sec.classList.toggle("collapsed");
+        head.setAttribute("aria-expanded", String(!collapsed));
+        if (collapsed) unmountDay(sec);
+        else if (io) { io.unobserve(sec); io.observe(sec); }  // re-eval -> mount if near
+        syncCollapseAll();
+        return;
+      }
+      const hold = ev.target.closest(".ta-hold");
+      if (hold) {
+        if (hold.dataset.gcal) window.open(hold.dataset.gcal, "_blank");
+        return;
+      }
+      const stamp = ev.target.closest("[data-stamp]");
+      if (stamp) {
+        const on = stamp.classList.toggle("stamped");
+        if (on) stamp.parentElement.querySelectorAll("[data-stamp]").forEach(s => { if (s !== stamp) s.classList.remove("stamped"); });
+        const card = stamp.closest(".ta-card");
+        if (on && card) {
+          const verdict = stamp.dataset.stamp === "miss" ? "not_as_promised" : "as_promised";
+          fetch(`/feedback/${encodeURIComponent(card.dataset.id)}/${verdict}`, { method: "POST" }).catch(() => {});
+        }
+        return;
+      }
+      if (ev.target.closest("a, button")) return;   // title link, hold, stamps handled above
+      const card = ev.target.closest(".ta-card");
+      if (card) card.classList.toggle("open");
+    });
+
+    // collapse-all control removed; the per-day header chevrons remain the collapse lever.
+    function syncCollapseAll() {}
+
+    // ---- filter-bar height -> sticky dayhead offset (survives wrapping) ----
+    const fbEl = document.querySelector(".fb");
+    function setFbH() {
+      document.documentElement.style.setProperty("--fb-h", fbEl.offsetHeight + "px");
+    }
+    if (typeof ResizeObserver !== "undefined") new ResizeObserver(setFbH).observe(fbEl);
+    window.addEventListener("resize", setFbH);
+    setFbH();
+
+    // ---- threshold slider (native thumb; --p drives fill + liquid disc) ----
+    // The "NN%" readout and the liquid fill track every input pixel, but the
+    // expensive re-gate/re-render is DEBOUNCED (140ms trailing) so dragging no
+    // longer rebuilds the whole view on every pixel; release also flushes.
+    const threshInput = document.getElementById("threshRange");
+    const threshRead = document.getElementById("threshRead");
+    // apply any restored (localStorage) threshold to the control before first render
+    threshInput.value = state.thresh;
+    threshInput.style.setProperty("--p", state.thresh);
+    threshRead.textContent = state.thresh + "%";
+    let threshTimer = null;
+    threshInput.addEventListener("input", () => {
+      state.thresh = parseInt(threshInput.value, 10);
+      threshInput.style.setProperty("--p", state.thresh);
+      threshRead.textContent = state.thresh + "%";     // live, cheap
+      saveF({ thresh: state.thresh });
+      clearTimeout(threshTimer);
+      threshTimer = setTimeout(render, 140);           // re-gate, debounced
+    });
+    threshInput.addEventListener("change", () => {     // release -> flush now
+      clearTimeout(threshTimer);
+      render();
+    });
+
+    // ---- distance stepper ----
+    const distSeg = document.getElementById("distSeg");
+    distSeg.querySelectorAll("button").forEach(btn => {
+      // reflect any restored distance cap on the segmented control
+      const btnMi = btn.dataset.mi === "" ? null : parseFloat(btn.dataset.mi);
+      if (btnMi === state.maxMi) btn.setAttribute("aria-current", "true");
+      else btn.removeAttribute("aria-current");
+      btn.addEventListener("click", () => {
+        distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
+        btn.setAttribute("aria-current", "true");
+        const mi = btn.dataset.mi;
+        state.maxMi = mi === "" ? null : parseFloat(mi);
+        saveF({ maxMi: state.maxMi });
+        render();
+      });
+    });
+
+    // ---- free toggle ----
+    const freeToggle = document.getElementById("freeToggle");
+    freeToggle.setAttribute("aria-pressed", String(state.freeOnly));   // reflect restored state
+    freeToggle.addEventListener("click", () => {
+      state.freeOnly = !state.freeOnly;
+      freeToggle.setAttribute("aria-pressed", String(state.freeOnly));
+      saveF({ free: state.freeOnly });
+      render();
+    });
+
+    // ---- popovers ----
+    makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags, "tags");
+    makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources, "sources");
+
+    render();
+  })();
+  </script>
+
+  <div class="wrap">
+    <details class="explain">
+      <summary>how scoring works</summary>
+      <div class="why">
+        Each event gets a <b>&#127864; booze</b> score (0–100), shown as a mark on
+        every card (exact number under "the numbers"): an LLM reads the full
+        event listing and estimates the probability of free drinks, citing its
+        evidence. The five-segment meter is that probability.<br><br>
+        Event-type preference isn't a score — it's the <b>tags</b> filter above.
+        Pick the tags you're interested in and only matching events show
+        up (events with no tags at all are never hidden by it).<br><br>
+        The gold ring on each card is the <b>match</b>: the booze score. A bright,
+        glowing card is a <b>confident</b> pick (≥{{ (scoring_info.confident * 100) | int }},
+        capped at 3 per day); dimmed cards are <b>maybes</b>
+        (≥{{ (scoring_info.maybe * 100) | int }}); anything below is hidden.
+        Thresholds live in <code>scoring/weights.py</code>.
+      </div>
+    </details>
+  </div>
 </body>
 </html>

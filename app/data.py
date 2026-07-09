@@ -51,9 +51,13 @@ def fetch_events(start: datetime, end: datetime, user_id: str) -> list[Event]:
 
     scores: dict[str, dict] = defaultdict(dict)
     rationales: dict[str, dict] = defaultdict(dict)
+    blurbs: dict[str, str] = {}
     for s in score_rows:
         scores[s["event_id"]][s["scorer"]] = s["score"]
         rationales[s["event_id"]][s["scorer"]] = s["rationale"]
+        # The card blurb rides on the booze scorer's row (see scoring.scorers.booze).
+        if s["scorer"] == "booze" and s["blurb"]:
+            blurbs[s["event_id"]] = s["blurb"]
     feedback: dict[str, set] = defaultdict(set)
     for f in fb_rows:
         feedback[f["event_id"]].add(f["verdict"])
@@ -69,6 +73,7 @@ def fetch_events(start: datetime, end: datetime, user_id: str) -> list[Event]:
         e = Event.from_row(r)
         e.scores = scores.get(e.id, {})
         e.rationales = rationales.get(e.id, {})
+        e.blurb = blurbs.get(e.id)
         e.tags = tags.get(e.id, [])
         e.feedback = feedback.get(e.id, set())
         # .get (not []) so a host with no feedback stays None, not {ok:0,miss:0}

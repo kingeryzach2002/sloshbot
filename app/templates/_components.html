@@ -1,0 +1,160 @@
+{#
+  sloshbot shared components — the "coaster" tactile card system, plus the
+  outer site chrome (body/header/nav), built on the _tokens.html variables.
+  Include once, right after _tokens.html:
+    {% include "_tokens.html" %}
+    {% include "_components.html" %}
+  (_theme.html does both, so pages should just include _theme.html.)
+
+  Views may still override any of this locally for page-specific tuning
+  (e.g. week.html's .ta-card padding/cursor overrides) — that's expected;
+  what must NOT happen is a view being missing these rules entirely.
+#}
+<style>
+  /* ============================================================
+     BASE CHROME — page background + the outer site header/nav
+     shared verbatim across home/week/calendar (markup:
+     <header><h1 class="wordmark">...</h1><nav>...</nav></header>).
+     A slim, quiet bar — the real wordmark treatment lives inside
+     each view's own content (.lab/.fb), so this stays minimal.
+     ============================================================ */
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); margin: 0; }
+
+  /* ---- two-tier sticky chrome --------------------------------------
+     ROW 1 is this header: the serif-italic wordmark (left) and the four
+     quiet view TABS (right), on one baseline-aligned row. ROW 2 is each
+     view's own control bar (.fb / .cal-head-bar day headers / .day-dist),
+     which pins just beneath at top: var(--hdr-h). The tabs read like a
+     bar menu's section headers, not buttons: muted labels, the active
+     one lit brass with a 2px underslung brass bar. ------------------- */
+  :root { --hdr-h: 52px; }
+
+  header { position: sticky; top: 0; z-index: 100; box-sizing: border-box;
+        height: var(--hdr-h); padding: 0 20px;
+        display: flex; align-items: center; justify-content: space-between; gap: 24px;
+        background: var(--bg); border-bottom: 1px solid var(--line); }
+  header h1.wordmark { font-family: var(--serif); font-style: italic; font-weight: 600;
+        font-size: 23px; line-height: 1; margin: 0; color: var(--text); }
+  header h1.wordmark .tip { color: var(--gold); }
+
+  header nav { display: flex; align-items: center; gap: 22px; }
+  header nav a { position: relative; color: var(--muted); text-decoration: none;
+        font-family: var(--sans); font-size: 13.5px; letter-spacing: 0.05em;
+        padding-bottom: 4px; transition: color .18s var(--ease); }
+  header nav a::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+        height: 2px; background: var(--gold); border-radius: 2px;
+        transform: scaleX(0); transform-origin: center;
+        transition: transform .25s var(--ease); }
+  header nav a:hover { color: var(--gold); }
+  header nav a.active { color: var(--gold); }
+  header nav a.active::after { transform: scaleX(1); }
+
+  /* ============================================================
+     TACTILE — "The Coaster" card system (ported verbatim from
+     design_day.html / design_real.html's shared block). Every view
+     that renders event cards depends on this class set:
+       .ta-card(.confident/.maybe/.enter) .ta-top .ta-title(>a)
+       .coupe(.dim) > .glass .liq .stem .foot
+       .ta-meta(>.free/.rep) .ta-why .ta-foot .ta-tags(>span)
+       .ta-hold .ta-stamp-row(>.q) .ta-stamp(.stamped(.miss))
+       .ta-more > .ta-more-inner > .ta-meta-full(>.free) .ta-pour(>.q) .ta-raw
+     ============================================================ */
+  .ta-card { position: relative; border-radius: 16px; padding: 18px 18px 16px;
+             background:
+               var(--grain),
+               radial-gradient(120% 80% at 50% -10%, var(--sheen), transparent 60%),
+               linear-gradient(180deg, var(--card2), var(--card));
+             border: 1px solid var(--line);
+             box-shadow: var(--elev-rest);
+             transition: transform .2s var(--ease), box-shadow .3s var(--ease); }
+  .ta-card:hover { transform: translateY(-3px);
+             box-shadow: var(--elev-hover); }
+  .ta-card:active { transform: translateY(0);
+             box-shadow: var(--elev-press); }
+  .ta-card.confident {
+             background:
+               var(--grain),
+               radial-gradient(120% 90% at 50% -10%, var(--sheen-c), transparent 60%),
+               linear-gradient(180deg, var(--card2), var(--card));
+             border-color: var(--gold-dim);
+             box-shadow: var(--elev-glow-rest); }
+  .ta-card.confident:hover { box-shadow: var(--elev-glow-hover); }
+  .ta-card.confident:active { box-shadow: var(--elev-glow-press); }
+  @keyframes fb-enter { from { opacity: 0; } to { opacity: 1; } }
+  .ta-card.enter { animation: fb-enter .15s var(--ease); }
+
+  .ta-top { display: flex; align-items: flex-start; gap: 14px; }
+  .ta-title { flex: 1; min-width: 0; font-family: var(--serif); font-weight: 600;
+              font-size: 19px; line-height: 1.08; letter-spacing: -0.01em;
+              text-wrap: balance; }
+  .ta-card.confident .ta-title { font-size: 25px; }
+  .ta-title a { color: var(--text); text-decoration: none; transition: color .15s; }
+  .ta-title a:hover { color: var(--gold); }
+
+  .coupe { --p: 0; position: relative; width: 40px; height: 40px; flex: none; }
+  .coupe .glass { position: absolute; top: 4px; bottom: 8px; left: 50%; width: 34px;
+                  transform: translateX(-50%); overflow: hidden;
+                  border: 1.5px solid var(--gold-dim); border-top: none;
+                  border-radius: 0 0 40px 40px; background: rgba(0,0,0,0.25); }
+  .coupe.dim .glass { border-color: var(--line2); }
+  .coupe .liq { position: absolute; left: 0; right: 0; bottom: 0;
+                height: calc(var(--p) * 1%); background: var(--gold); opacity: 0.85;
+                transition: height .6s var(--ease); }
+  .coupe.dim .liq { background: var(--faint); opacity: 0.6; }
+  .coupe .stem { position: absolute; left: 50%; bottom: 2px; width: 1.5px; height: 8px;
+                 background: var(--gold-dim); transform: translateX(-50%); }
+  .coupe .foot { position: absolute; left: 50%; bottom: 1px; width: 18px; height: 1.5px;
+                 background: var(--gold-dim); transform: translateX(-50%); }
+  .coupe.dim .stem, .coupe.dim .foot { background: var(--line2); }
+
+  .ta-meta { color: var(--meta); font-size: 12.5px; margin-top: 7px; letter-spacing: 0.005em;
+             font-variant-numeric: oldstyle-nums proportional-nums; }
+  .ta-meta .free { color: var(--green); }
+  .ta-meta .rep { color: var(--green); }
+  .ta-why { font-family: var(--serif); font-style: italic; font-weight: 400;
+            font-size: 15px; line-height: 1.42; color: var(--muted); margin: 10px 0 2px;
+            max-width: 40ch; text-wrap: pretty; }
+
+  .ta-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+  .ta-tags { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; }
+  .ta-tags span { font-size: 11px; color: var(--muted); background: var(--card2);
+                  border: 1px solid var(--line2); border-radius: 99px; padding: 2px 9px; }
+  .ta-hold { font-size: 12.5px; font-weight: 650; color: var(--bg); background: var(--gold);
+             border: none; border-radius: 8px; padding: 7px 14px; cursor: pointer;
+             box-shadow: 0 3px 0 var(--gold-press), 0 6px 12px -6px rgba(0,0,0,0.8);
+             transition: transform .1s var(--ease), box-shadow .1s var(--ease); }
+  .ta-hold:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--gold-press), 0 8px 14px -6px rgba(0,0,0,0.8); }
+  .ta-hold:active { transform: translateY(3px); box-shadow: 0 0 0 var(--gold-press), 0 2px 6px -4px rgba(0,0,0,0.8); }
+  .ta-hold:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+  .ta-stamp-row { display: flex; align-items: center; gap: 8px; margin-top: 13px;
+                  padding-top: 12px; border-top: 1px solid var(--line); }
+  .ta-stamp-row .q { font-size: 10px; color: var(--faint); text-transform: uppercase;
+                     letter-spacing: 0.11em; }
+  .ta-stamp { font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 3px 9px;
+              cursor: pointer; transition: transform .12s var(--ease), color .15s, border-color .15s; }
+  .ta-stamp:hover { color: var(--text); border-color: var(--gold-dim); }
+  .ta-stamp:active { transform: scale(0.9) rotate(-3deg); }
+  .ta-stamp:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .ta-stamp.stamped { color: var(--green); border-color: var(--green);
+                      transform: rotate(-5deg); opacity: 0.9; }
+  .ta-stamp.stamped.miss { color: var(--red); border-color: var(--red); }
+
+  /* ---- expanded disclosure: full meta + "why the pour" rationale.
+         .q is the micro-label — always on its own visual beat, never
+         run into the sentence that follows it. ---- */
+  .ta-more { max-height: 0; overflow: hidden; opacity: 0;
+             transition: max-height .35s var(--ease), opacity .25s; }
+  .ta-card.open .ta-more { max-height: 480px; opacity: 1; }
+  .ta-more-inner { padding-top: 8px; }
+  .ta-meta-full { color: var(--meta); font-size: 12.5px; letter-spacing: 0.005em;
+                  font-variant-numeric: oldstyle-nums proportional-nums; }
+  .ta-meta-full .free { color: var(--green); }
+  .ta-pour { margin-top: 8px; font-size: 12.5px; line-height: 1.45;
+             color: var(--muted); }
+  .ta-pour .q { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+                color: var(--faint); margin-right: 6px; }
+  .ta-raw { color: var(--faint); }
+</style>

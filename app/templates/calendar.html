@@ -7,53 +7,248 @@
 <title>sloshbot — calendar</title>
 {% include "_theme.html" %}
 <style>
-  :root { --hour-h: 56px; /* one hour of grid height */ }
-  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 40px; }
+  /* ============================================================
+     calendar (7-day time-grid) — same tokens/material as design_real,
+     different layout physics. Ported from calendar.html's grid
+     mechanics (52px gutter + 7 columns + --hour-h rows + repeating-
+     gradient hour lines), re-skinned in Brass & Oxblood.
 
-  .cal { display: grid; grid-template-columns: 52px repeat(7, 1fr);
-         border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
-         background: var(--card); }
-  .cal-head { position: sticky; top: 0; z-index: 3; background: var(--card2);
-              border-bottom: 1px solid var(--line); padding: 8px 4px;
-              text-align: center; font-size: 12px; color: var(--muted);
-              text-transform: uppercase; letter-spacing: 0.08em; }
-  .cal-head .num { display: block; font-size: 18px; color: var(--text);
-                   font-weight: 650; letter-spacing: 0; text-transform: none; }
-  .cal-head.today .num { color: var(--gold); }
-  .cal-head .more { display: block; font-size: 9.5px; color: var(--faint);
-                     text-transform: none; letter-spacing: 0; margin-top: 1px; }
-  .cal-cap { color: var(--faint); font-size: 12px; margin: 0 0 14px; }
-  .gutter { border-right: 1px solid var(--line); }
-  .gutter .hour { height: var(--hour-h); font-size: 10.5px; color: var(--muted);
-                  text-align: right; padding-right: 6px; transform: translateY(-7px); }
+     THE CHIP-VS-COUPE CALL: the signature coupe glass needs ~34-40px
+     to read as a glass (bowl silhouette + liquid line). Grid blocks
+     here can be as short as ~15px (a 20-30min event) and as narrow as
+     a fifth of a ~150px day column once two-three events collide. A
+     coupe at that scale collapses to a smudge. So the chip carries the
+     score as a thin GOLD FILL-BAR down its left edge — height = booze%,
+     same semantics as the coupe's liquid, but a bar degrades gracefully
+     at any block height down to a couple of px, and reads correctly
+     even sliced to a 24px-wide lane. The full coupe still appears —
+     at its proper 40px size — in the click-to-open popover, so the
+     motif isn't lost, just deferred to where there's room for it.
+     ============================================================ */
+  body { background: var(--bg); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 20px 48px; }
+
+  /* ---- header: quiet wordmark + caption, no full filter bar ----
+     A single "chance of booze" threshold slider is cheap to reuse
+     (same --thresh-range control as design_real) and it's the
+     identity control, so it stays; distance/tags/source/free are a
+     filter BAR, which the brief says to skip in this draft. */
+  .cal-head-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+                  row-gap: 10px; padding-bottom: 18px; }
+  .cal-mark { font-family: var(--serif); font-style: italic; font-weight: 600;
+              font-size: 23px; line-height: 1.1; color: var(--text); margin: 0; flex: none; }
+  .cal-mark .tip { color: var(--gold); }
+  .cal-week-lbl { font-family: var(--sans); font-size: 13px; color: var(--muted); flex: none; }
+
+  .cal-thresh { display: flex; align-items: center; gap: 8px; flex: none; }
+  .cal-thresh .fb-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+                         color: var(--faint); white-space: nowrap; }
+  .cal-thresh .thresh-range { --p: 65; -webkit-appearance: none; appearance: none;
+                  width: 130px; height: 24px; margin: 0; background: transparent; cursor: pointer; }
+  .cal-thresh .thresh-range::-webkit-slider-runnable-track { height: 2px; border-radius: 99px;
+                  background: linear-gradient(to right,
+                    var(--gold) calc(var(--p) * 1%), var(--line2) calc(var(--p) * 1%)); }
+  .cal-thresh .thresh-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+                  width: 16px; height: 16px; margin-top: -7px; border-radius: 50%; border: none;
+                  background: radial-gradient(circle closest-side,
+                    var(--gold) calc(var(--p) * 1%), transparent calc(var(--p) * 1% + 2%));
+                  box-shadow: 0 2px 7px -1px rgba(0,0,0,0.85); }
+  .cal-thresh .thresh-range::-moz-range-track { height: 2px; border-radius: 99px; background: var(--line2); }
+  .cal-thresh .thresh-range::-moz-range-progress { height: 2px; border-radius: 99px; background: var(--gold); }
+  .cal-thresh .thresh-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%;
+                  border: none; box-sizing: border-box;
+                  background: radial-gradient(circle closest-side,
+                    var(--gold) calc(var(--p) * 1%), transparent calc(var(--p) * 1% + 2%));
+                  box-shadow: 0 2px 7px -1px rgba(0,0,0,0.85); }
+  .cal-thresh .thresh-range:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 4px; }
+  .cal-thresh .thresh-read { font-variant-numeric: tabular-nums; color: var(--gold);
+                              font-size: 13px; font-weight: 600; width: 32px; text-align: right; }
+
+  /* ---- filter controls (ported verbatim from design_real.html's
+     filter bar: same seg material, same popover chips, same states) ---- */
+  .fb-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+            color: var(--faint); white-space: nowrap; }
+  .fb-filters { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; flex: none; }
+
+  /* distance stepper — FLAT controls in the seg material */
+  .fb-seg { display: inline-flex; gap: 2px; background: var(--card2);
+            border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
+  .fb-seg button { font: inherit; font-family: var(--mono); font-size: 11.5px;
+            font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer;
+            background: none; border: none; border-radius: 8px; padding: 4px 7px;
+            transition: color .18s, background .3s var(--ease), transform .12s var(--ease); }
+  .fb-seg button i { font-style: normal; }
+  .fb-seg button:hover { color: var(--text); }
+  .fb-seg button:active { transform: scale(0.96); }
+  .fb-seg button[aria-current="true"] { background: var(--gold); color: var(--bg); }
+  .fb-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* free toggle — a STAMP: press-and-rotate (mirrors week.html) */
+  .fb-stamp { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; flex: none;
+              transition: transform .12s var(--ease), color .15s, border-color .15s; }
+  .fb-stamp:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-stamp:active { transform: scale(0.94) rotate(-2deg); }
+  .fb-stamp:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-stamp[aria-pressed="true"] { color: var(--gold); border-color: var(--gold);
+              transform: rotate(-3deg); }
+
+  /* chip popovers (tags, source) — triggers are FLAT */
+  .fb-pop { position: relative; flex: none; }
+  .fb-pop-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; white-space: nowrap;
+              transition: color .15s, border-color .15s, transform .12s var(--ease); }
+  .fb-pop-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-pop-btn:active { transform: scale(0.96); }
+  .fb-pop-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-pop-btn.active { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+              min-width: 200px; max-width: 260px;
+              background-color: var(--card2); background-image: var(--grain);
+              border: 1px solid var(--line2); border-radius: 16px; padding: 10px;
+              box-shadow: var(--elev-pop);
+              display: none; flex-wrap: wrap; gap: 6px; }
+  .fb-panel.open { display: flex; }
+  .fb-chip { font-size: 11px; color: var(--muted); background: var(--card);
+             border: 1px solid var(--line2); border-radius: 99px; padding: 4px 10px;
+             cursor: pointer; transition: color .15s, border-color .15s, transform .12s var(--ease); }
+  .fb-chip:hover { color: var(--text); }
+  .fb-chip:active { transform: scale(0.96); }
+  .fb-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-chip .n { color: var(--faint); margin-left: 4px; }
+  .fb-chip.on { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-chip.on .n { color: var(--gold-dim); }
+
+  /* ---- the grid ---- */
+  :root { --hour-h: 52px; --gutter-w: 54px; }
+  .cal { position: relative; display: grid; grid-template-columns: var(--gutter-w) repeat(7, 1fr);
+         border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden;
+         background-color: var(--card); background-image: var(--grain); }
+
+  .cal-head { position: sticky; top: var(--hdr-h); z-index: 5; background-color: var(--card2);
+              background-image: var(--grain); border-bottom: 1px solid var(--line2);
+              padding: 9px 4px 8px; text-align: center; }
+  .cal-head .dow { display: block; font-family: var(--serif); font-style: normal;
+                    font-weight: 600; font-size: 13.5px; letter-spacing: -0.005em;
+                    color: var(--text); text-transform: uppercase; }
+  .cal-head .num { display: block; font-size: 17px; font-family: var(--serif); font-weight: 600;
+                    color: var(--muted); margin-top: 1px; font-variant-numeric: oldstyle-nums; }
+  .cal-head.today { background-color: rgba(208,160,74,0.07); }
+  .cal-head.today .dow, .cal-head.today .num { color: var(--gold); }
+  .cal-head .more { display: block; font-size: 9px; color: var(--faint); margin-top: 1px;
+                    text-decoration: underline dotted; text-underline-offset: 2px;
+                    letter-spacing: 0.02em; transition: color .15s var(--ease); }
+  .cal-head .more:hover { color: var(--gold); }
+  .cal-head.empty .dow, .cal-head.empty .num { color: var(--faint); }
+  .cal-head .gutter-lbl { font-size: 9.5px; color: var(--faint); }
+  .col.empty { background-color: rgba(0,0,0,0.12); }
+
+  .gutter { border-right: 1px solid var(--line); background: var(--card2); }
+  .gutter .hour { height: var(--hour-h); font-family: var(--sans); font-size: 10px;
+                   color: var(--faint); text-align: right; padding-right: 8px;
+                   transform: translateY(-6px); font-variant-numeric: oldstyle-nums; }
+
   .col { position: relative; border-right: 1px solid var(--line);
-         height: calc(var(--hour-h) * 16);
-         background: repeating-linear-gradient(to bottom,
+         background-image: repeating-linear-gradient(to bottom,
            transparent 0, transparent calc(var(--hour-h) - 1px),
            var(--line) calc(var(--hour-h) - 1px), var(--line) var(--hour-h)); }
   .col:last-child { border-right: none; }
-  .col.today { background-color: rgba(232, 179, 75, 0.04); }
+  .col.today { background-color: rgba(208,160,74,0.035); }
 
-  .evt { position: absolute; z-index: 1; overflow: hidden; padding: 3px 6px;
-         border-radius: 6px; border: 1px solid var(--line); border-left: 3px solid var(--muted);
-         background: var(--card2); font-size: 11px; line-height: 1.3;
-         color: var(--text); text-decoration: none; display: block; }
-  .evt:hover { z-index: 2; border-color: var(--gold-dim); }
-  .evt.confident { border-left-color: var(--gold); background: #2a2213; }
-  .evt .t { font-weight: 650; display: block; }
-  .evt .when { color: var(--muted); }
-  .evt .tags { margin-top: 2px; display: flex; gap: 3px; flex-wrap: wrap; }
-  .evt .tag { font-size: 9.5px; padding: 0 5px; border-radius: 99px;
-              border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  /* ---- event chip ---- */
+  .evt { position: absolute; z-index: 2; display: block; overflow: hidden;
+         box-sizing: border-box; padding: 3px 6px 3px 8px; border-radius: var(--r-stamp);
+         background: var(--card2); border: 1px solid var(--line);
+         cursor: pointer; text-decoration: none; color: var(--text);
+         transition: transform .16s var(--ease), box-shadow .2s var(--ease),
+                     border-color .15s, z-index 0s; }
+  .evt::before { /* the fill-bar: booze% as a gold liquid column, left edge */
+         content: ""; position: absolute; left: 0; bottom: 0; top: 0; width: 3px;
+         background: var(--line2); }
+  .evt::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+         height: 100%; background: var(--faint); opacity: 0.7; }
+  .evt.confident { border-color: var(--gold-dim); background: #211a10; box-shadow: var(--elev-glow-rest); }
+  .evt.confident::after { background: var(--gold); opacity: 0.95; }
+  .evt:hover { transform: translateY(-1px); z-index: 6;
+               box-shadow: var(--elev-hover); border-color: var(--gold-dim); }
+  .evt.confident:hover { box-shadow: var(--elev-glow-hover); }
+  .evt:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; z-index: 6; }
+  .evt.open { z-index: 7; }
+  .evt .t { display: block; font-family: var(--sans); font-weight: 650; font-size: 11px;
+            line-height: 1.22; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .evt .w { display: block; font-size: 9.5px; color: var(--muted);
+            font-variant-numeric: oldstyle-nums tabular-nums; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; }
+  /* short blocks (<3 grid-rows-worth) drop the time line, title only */
+  .evt.short .w { display: none; }
+  .evt.short .t { line-height: var(--h, 16px); }
 
-  .now-line { position: absolute; left: 0; right: 0; z-index: 2; height: 0;
+  /* ---- now line ---- */
+  .now-line { position: absolute; left: 0; right: 0; z-index: 4; height: 0;
               border-top: 2px solid var(--red); pointer-events: none; }
   .now-line::before { content: ""; position: absolute; left: -4px; top: -5px;
-                      width: 8px; height: 8px; border-radius: 99px; background: var(--red); }
+                       width: 8px; height: 8px; border-radius: 99px; background: var(--red);
+                       box-shadow: 0 0 0 0 rgba(194,106,95,0.6); animation: now-pulse 2.2s var(--ease) infinite; }
+  @keyframes now-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(194,106,95,0.55); }
+    70%  { box-shadow: 0 0 0 7px rgba(194,106,95,0); }
+    100% { box-shadow: 0 0 0 0 rgba(194,106,95,0); }
+  }
+
+  /* ---- popover: full coaster-card info, one open at a time ---- */
+  .evt-pop { position: fixed; z-index: 50; width: 280px; max-width: calc(100vw - 24px);
+             background-color: var(--card2); background-image: var(--grain);
+             border: 1px solid var(--line2); border-radius: var(--r-card);
+             box-shadow: var(--elev-pop); padding: 16px; display: none; }
+  .evt-pop.open { display: block; animation: fb-enter .16s var(--ease); }
+  @keyframes fb-enter { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+  .evt-pop-top { display: flex; align-items: flex-start; gap: 12px; }
+  .evt-pop-title { flex: 1; min-width: 0; font-family: var(--serif); font-weight: 600;
+                    font-size: 17px; line-height: 1.12; letter-spacing: -0.01em; }
+  .evt-pop-title a { color: var(--text); text-decoration: none; }
+  .evt-pop-title a:hover { color: var(--gold); }
+  .evt-pop .coupe { width: 34px; height: 34px; flex: none; }
+  .evt-pop .coupe .glass { top: 3px; bottom: 7px; width: 29px;
+                            border-radius: 0 0 34px 34px; }
+  .evt-pop .coupe .foot { width: 15px; }
+  .evt-pop-read { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .evt-pop-meta { color: var(--meta); font-size: 12px; margin-top: 9px;
+                   letter-spacing: 0.005em; font-variant-numeric: oldstyle-nums proportional-nums; }
+  .evt-pop-meta .free { color: var(--green); }
+  .evt-pop-blurb { font-family: var(--serif); font-style: italic; font-weight: 400;
+                    font-size: 13.5px; line-height: 1.4; color: var(--muted); margin: 10px 0 0; }
+  .evt-pop-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px;
+                   padding-top: 11px; border-top: 1px solid var(--line); }
+  .evt-pop-tags { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; }
+  .evt-pop-tags span { font-size: 10.5px; color: var(--muted); background: var(--card);
+                        border: 1px solid var(--line); border-radius: 99px; padding: 2px 8px; }
+  .evt-pop-hold { font-size: 12px; font-weight: 650; color: var(--bg); background: var(--gold);
+                   border: none; border-radius: var(--r-control); padding: 6px 11px; cursor: pointer;
+                   box-shadow: 0 3px 0 var(--gold-press), 0 6px 12px -6px rgba(0,0,0,0.8);
+                   transition: transform .12s var(--ease), box-shadow .12s var(--ease); }
+  .evt-pop-hold:hover { transform: translateY(-1px); }
+  .evt-pop-hold:active { transform: translateY(2px); box-shadow: 0 0 0 var(--gold-press); }
+
+  @media (max-width: 760px) {
+    :root { --gutter-w: 40px; }
+    .cal-head .dow { font-size: 11px; }
+    .cal-head .num { font-size: 14px; }
+    .evt .t { font-size: 10px; }
+  }
+
+  .cal-note { color: var(--faint); font-size: 12px; margin-top: 16px; text-align: center; }
+
+  /* ---- coupe glass now lives in the shared _components.html (included
+     via _theme.html); no override needed here, the popover just uses
+     it at its natural size. ---- */
 </style>
+
 </head>
 <body>
-<div class="wrap">
   <header>
     <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
     <nav>
@@ -64,9 +259,524 @@
     </nav>
   </header>
 
-  {% include "_filterbar.html" %}
+<div class="wrap">
+    <div class="cal-head-bar">
+      <span class="cal-week-lbl" id="calWeekLbl"></span>
+      <div class="cal-thresh">
+        <span class="fb-lbl">chance of booze</span>
+        <input type="range" min="0" max="100" step="1" value="65" class="thresh-range"
+               id="threshRange" aria-label="booze confidence to light a block up; below it a block dims but stays shown">
+        <span class="thresh-read" id="threshRead">65%</span>
+      </div>
 
-  <div id="page-main">{% include "_main_calendar.html" %}</div>
-</div>
+      <div class="fb-filters">
+        <span class="fb-lbl">filter</span>
+        <div class="fb-seg" id="distSeg" role="group" aria-label="distance cap">
+          <button type="button" data-mi="" aria-current="true">any</button>
+          <button type="button" data-mi="1">1<i>mi</i></button>
+          <button type="button" data-mi="2">2<i>mi</i></button>
+          <button type="button" data-mi="3">3<i>mi</i></button>
+          <button type="button" data-mi="5">5<i>mi</i></button>
+        </div>
+        <button type="button" class="fb-stamp" id="freeToggle" aria-pressed="false">free</button>
+        <div class="fb-pop">
+          <button type="button" class="fb-pop-btn" id="tagsBtn" aria-expanded="false">tags</button>
+          <div class="fb-panel" id="tagsPanel"></div>
+        </div>
+        <div class="fb-pop">
+          <button type="button" class="fb-pop-btn" id="sourceBtn" aria-expanded="false">source</button>
+          <div class="fb-panel" id="sourcePanel"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cal" id="cal">
+      <div class="cal-head"></div>
+      <!-- day headers + gutter + columns injected by JS -->
+    </div>
+
+    <p class="cal-note">click a pour for the full card &middot; hover for a peek &middot; times shown in America/Los_Angeles</p>
+  </div>
+
+
+<script id="events-data" type="application/json">{{ events_json | safe }}</script>
+
+<script>
+(function () {
+  const EVENTS = JSON.parse(document.getElementById("events-data").textContent);
+  const TZ = "America/Los_Angeles";
+
+  // ---- grid bounds: earliest start ~8:55am, latest end (clipped at
+  // day boundary) ~midnight -> 8am to midnight covers the week with a
+  // little headroom, 16 rows. ----
+  const GRID_START_HR = 8;   // 8am
+  const GRID_END_HR = 24;    // midnight
+  const HOURS = GRID_END_HR - GRID_START_HR;
+
+  // variant: "bounded top-12 per day" — the grid never lane-packs more than
+  // this many events for a single day, no matter how many survive the
+  // filters. The cap is applied AFTER filtering (so it recomputes on every
+  // filter change) and BEFORE layoutDay (the packing algorithm itself is
+  // untouched — it just sees a smaller list).
+  const DAY_CAP = 6;
+
+  // the booze slider is a LIGHTING control, not a filter: it never adds or
+  // removes a block and never re-packs lanes. A shown block is "lit" (the
+  // confident tier: gold rim + glow + brighter surface) when its booze
+  // clears the slider, else dim. The other three ARE hard filters that
+  // change which events exist, so they recompute the top-6 + relayout.
+  let state = { thresh: 65, maxMi: null, freeOnly: false, tags: new Set(), sources: new Set() };
+
+  // ---- shared cross-page filter persistence (week / calendar / map) ----
+  // Single JSON object under "slosh.filters"; helpers merge-patch so each
+  // view only writes the field it owns and never clobbers the others.
+  function loadF(){ try { return JSON.parse(localStorage.getItem("slosh.filters")) || {}; } catch(_) { return {}; } }
+  function saveF(patch){ try { localStorage.setItem("slosh.filters", JSON.stringify(Object.assign(loadF(), patch))); } catch(_) {} }
+
+  const f = loadF();
+  if (typeof f.thresh === "number" && f.thresh >= 0 && f.thresh <= 100) state.thresh = f.thresh;
+  if (f.maxMi === null || typeof f.maxMi === "number") state.maxMi = f.maxMi;
+  if (typeof f.free === "boolean") state.freeOnly = f.free;
+  state.tags = new Set(f.tags || []);
+  state.sources = new Set(f.sources || []);
+
+  // hard filters, AND-composed (matches design_real.html / app/main.py):
+  //  - distance: events with unknown (null) distance are never dropped;
+  //  - tags: an event with no tags is never dropped by the tag filter,
+  //          otherwise it must share at least one selected tag (union);
+  //  - source: plain membership (every event has exactly one source).
+  function passesFilters(e) {
+    if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi > state.maxMi) return false;
+    if (state.freeOnly && e.is_free !== 1) return false;
+    if (state.tags.size && (e.tags || []).length && !e.tags.some(t => state.tags.has(t))) return false;
+    if (state.sources.size && !state.sources.has(e.source)) return false;
+    return true;
+  }
+
+  function tzParts(iso) {
+    // decompose an ISO instant into its America/Los_Angeles wall-clock
+    // fields, independent of the browser's local timezone.
+    const d = new Date(iso);
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false, weekday: "short",
+    });
+    const parts = {};
+    fmt.formatToParts(d).forEach(p => { parts[p.type] = p.value; });
+    let hour = parseInt(parts.hour, 10);
+    if (hour === 24) hour = 0;
+    return {
+      dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+      hour, minute: parseInt(parts.minute, 10), weekday: parts.weekday,
+    };
+  }
+
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ });
+  }
+
+  // backend always sets end_dt (defaults to start+2h when ends_at is null,
+  // see presenter.enrich); prefer it, fall back to ends_at for safety.
+  function endIso(e) { return e.end_dt || e.ends_at; }
+
+  function boozeRead(n) {
+    if (n >= 90) return "basically an open bar";
+    if (n >= 75) return "probably";
+    if (n >= 60) return "good odds";
+    if (n >= 40) return "coin flip";
+    if (n >= 20) return "bring your own";
+    return "bone dry";
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function cleanVenue(name) {
+    if (!name) return "";
+    const idx = name.indexOf(",");
+    return (idx === -1 ? name : name.slice(0, idx)).trim();
+  }
+
+  // ---- 7-day span: today (real PT wall-clock date) through +6 days,
+  // matching the server's today_midnight..+7d query window. Built from the
+  // clock, NOT from which dates happen to have events — a day with zero
+  // events (real, possibly-sparse data) still needs its column. ----
+  function addDaysKey(key, n) {
+    const [y, m, d] = key.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + n));
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+  }
+  const TODAY_KEY = tzParts(new Date().toISOString()).dateKey;
+  const dayKeys = Array.from({ length: 7 }, (_, i) => addDaysKey(TODAY_KEY, i));
+
+  // ---- position math: a fraction-of-grid [0,1] for a wall-clock hour+minute ----
+  function frac(hour, minute) {
+    const h = hour + minute / 60;
+    return Math.max(0, Math.min(1, (h - GRID_START_HR) / HOURS));
+  }
+
+  // ---- lay out one day's events: minutes-since-grid-start + naive
+  // interval-graph coloring for side-by-side overlap columns (a
+  // connected cluster of mutually-overlapping events splits into N
+  // equal lanes; non-overlapping events each get the full width). ----
+  function layoutDay(dayEvents) {
+    const items = dayEvents.map(e => {
+      const s = tzParts(e.starts_at);
+      let sMin = s.hour * 60 + s.minute;
+      const enD = new Date(endIso(e));
+      const en = tzParts(endIso(e));
+      let eMin = en.hour * 60 + en.minute;
+      // clip events that cross midnight (or otherwise end "before" they
+      // start once wrapped) to the end of the visible day
+      if (en.dateKey !== s.dateKey || eMin <= sMin) eMin = 24 * 60;
+      // clamp to the grid window so nothing renders off-canvas
+      sMin = Math.max(sMin, GRID_START_HR * 60);
+      eMin = Math.min(Math.max(eMin, sMin + 20), GRID_END_HR * 60);
+      return { e, sMin, eMin, lane: 0, lanes: 1 };
+    }).sort((a, b) => a.sMin - b.sMin || a.eMin - b.eMin);
+
+    // cluster consecutive/overlapping items, then greedily assign lanes
+    // within each cluster (classic calendar collision packing)
+    let clusterStart = 0;
+    let clusterEnd = -1;
+    let cluster = [];
+    function flush() {
+      if (!cluster.length) return;
+      const lanesEnd = []; // end time currently occupying each lane
+      cluster.forEach(it => {
+        let lane = lanesEnd.findIndex(end => end <= it.sMin);
+        if (lane === -1) { lane = lanesEnd.length; lanesEnd.push(it.eMin); }
+        else lanesEnd[lane] = it.eMin;
+        it.lane = lane;
+      });
+      const totalLanes = lanesEnd.length;
+      cluster.forEach(it => { it.lanes = totalLanes; });
+      cluster = [];
+    }
+    items.forEach(it => {
+      if (cluster.length && it.sMin >= clusterEnd) flush();
+      cluster.push(it);
+      clusterEnd = cluster.length === 1 ? it.eMin : Math.max(clusterEnd, it.eMin);
+    });
+    flush();
+
+    return items.map(it => {
+      const top = frac(Math.floor(it.sMin / 60), it.sMin % 60) * 100;
+      const bottom = frac(Math.floor(it.eMin / 60), it.eMin % 60) * 100;
+      const width = 100 / it.lanes;
+      const left = it.lane * width;
+      return { e: it.e, top, height: Math.max(bottom - top, 0.4), left, width };
+    });
+  }
+
+  // ---- popover (one open at a time, closes on outside click) ----
+  let openPop = null;
+  let openChip = null;
+  const popEl = document.createElement("div");
+  popEl.className = "evt-pop";
+  popEl.setAttribute("role", "dialog");
+  document.body.appendChild(popEl);
+
+  // "+ calendar" always opens the pre-filled Google Calendar template link
+  // for whichever event the popover is currently showing (openPop).
+  popEl.addEventListener("click", (ev) => {
+    if (ev.target.closest(".evt-pop-hold") && openPop) window.open(openPop.gcal, "_blank");
+  });
+
+  function closePop() {
+    popEl.classList.remove("open");
+    if (openChip) openChip.classList.remove("open");
+    openPop = null; openChip = null;
+  }
+
+  function openPopFor(chip, e) {
+    if (openChip === chip) { closePop(); return; }
+    const confident = e.booze >= state.thresh;
+    const dim = confident ? "" : "dim";
+    const read = boozeRead(e.booze);
+    const venue = cleanVenue(e.venue_name);
+    const metaParts = [
+      fmtTime(e.starts_at) + "–" + fmtTime(endIso(e)),
+      e.is_free ? '<span class="free">free</span>' : null,
+      (e.neighborhood || venue) ? escapeHtml(e.neighborhood || venue) : null,
+      e.host_name ? "by " + escapeHtml(e.host_name) : null,
+    ].filter(Boolean);
+    const tags = (e.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join("");
+    popEl.innerHTML = `
+      <div class="evt-pop-top">
+        <span class="evt-pop-title"><a href="${escapeHtml(e.url || '#')}" target="_blank" rel="noopener">${escapeHtml(e.title)}</a></span>
+        <span class="coupe ${dim}" style="--p:${e.booze}" title="${read} (${e.booze}%)">
+          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+        </span>
+      </div>
+      <div class="evt-pop-read">${read}</div>
+      <div class="evt-pop-meta">${metaParts.join(" &middot; ")}</div>
+      <p class="evt-pop-blurb">${escapeHtml(e.blurb || "")}</p>
+      <div class="evt-pop-foot"><div class="evt-pop-tags">${tags}</div><button type="button" class="evt-pop-hold">+ calendar</button></div>
+    `;
+    const r = chip.getBoundingClientRect();
+    const popW = 280;
+    let left = r.left;
+    if (left + popW > window.innerWidth - 12) left = window.innerWidth - popW - 12;
+    left = Math.max(12, left);
+    let top = r.bottom + 8;
+    popEl.style.left = left + "px";
+    popEl.style.top = top + "px";
+    popEl.classList.add("open");
+    // clamp vertically after layout, in case it would run off the bottom
+    requestAnimationFrame(() => {
+      const ph = popEl.offsetHeight;
+      if (top + ph > window.innerHeight - 12) {
+        popEl.style.top = Math.max(12, r.top - ph - 8) + "px";
+      }
+    });
+    if (openChip) openChip.classList.remove("open");
+    chip.classList.add("open");
+    openChip = chip; openPop = e;
+  }
+
+  document.addEventListener("click", (ev) => {
+    if (ev.target.closest(".evt-pop") || ev.target.closest(".evt")) return;
+    closePop();
+  });
+  window.addEventListener("resize", closePop);
+  window.addEventListener("scroll", closePop, true);
+
+  // "+N more" is a real link to the weekly (list) view, which has room for
+  // the full, uncapped day — so it navigates natively, no JS handler needed.
+
+  // ---- render ----
+  function chipHtml(pos) {
+    const e = pos.e;
+    // "lit" = clears the slider (the confident tier styling). Rendered from
+    // the current slider value, but thereafter re-toggled live by relight()
+    // without re-packing — data-booze lets that handler compare per block.
+    const lit = e.booze >= state.thresh;
+    const read = boozeRead(e.booze);
+    const venue = cleanVenue(e.venue_name);
+    const isShort = pos.height < 3.6; // ~<35min at a 16hr/100% grid
+    const titleAttr = `${e.title} · ${fmtTime(e.starts_at)}–${fmtTime(endIso(e))} · ${venue || "venue TBA"} · ${read} (${e.booze}%)`;
+    return `<div class="evt ${lit ? "confident" : ""} ${isShort ? "short" : ""}" data-id="${escapeHtml(e.id)}" data-booze="${e.booze}"
+                 tabindex="0" role="button" aria-haspopup="dialog"
+                 style="top:${pos.top.toFixed(3)}%; height:${pos.height.toFixed(3)}%; left:${pos.left.toFixed(3)}%; width:calc(${pos.width.toFixed(3)}% - 2px); --p:${e.booze}; --h:${Math.max(pos.height, 3)}%"
+                 title="${escapeHtml(titleAttr)}">
+      <span class="t">${escapeHtml(e.title)}</span>
+      <span class="w">${fmtTime(e.starts_at)}</span>
+    </div>`;
+  }
+
+  function fmtDow(dateKey) {
+    return new Date(dateKey + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", timeZone: TZ }).toUpperCase();
+  }
+  function fmtNum(dateKey) {
+    return new Date(dateKey + "T12:00:00").toLocaleDateString("en-US", { day: "numeric", timeZone: TZ });
+  }
+
+  // ---- header label: "Jul 7–13" from the real 7-day span ----
+  const weekLbl = document.getElementById("calWeekLbl");
+  if (weekLbl) {
+    const first = new Date(dayKeys[0] + "T12:00:00");
+    const last = new Date(dayKeys[dayKeys.length - 1] + "T12:00:00");
+    const sameMonth = first.getMonth() === last.getMonth();
+    const mFmt = (d) => d.toLocaleDateString("en-US", { month: "short", timeZone: TZ });
+    const dFmt = (d) => d.toLocaleDateString("en-US", { day: "numeric", timeZone: TZ });
+    weekLbl.textContent = sameMonth
+      ? `${mFmt(first)} ${dFmt(first)}–${dFmt(last)}`
+      : `${mFmt(first)} ${dFmt(first)}–${mFmt(last)} ${dFmt(last)}`;
+  }
+
+  function render() {
+    const cal = document.getElementById("cal");
+    // build the day buckets from the FILTERED set only — every downstream
+    // step (lane packing, widths, header counts, empty days) then reflects
+    // exactly what survived the filters.
+    const byDay = new Map();
+    dayKeys.forEach(k => byDay.set(k, []));
+    EVENTS.filter(passesFilters).forEach(e => {
+      const k = tzParts(e.starts_at).dateKey;
+      if (byDay.has(k)) byDay.get(k).push(e);
+    });
+
+    let html = `<div class="cal-head"><span class="gutter-lbl">PT</span></div>`;
+    dayKeys.forEach(k => {
+      const today = k === TODAY_KEY;
+      const n = byDay.get(k).length;
+      const empty = n === 0;
+      // the grid only ever draws the top DAY_CAP by booze score; any events
+      // beyond that surface through the actionable "+N more" link below
+      // (the old redundant per-day total count has been removed).
+      const overflow = Math.max(0, n - DAY_CAP);
+      const more = overflow > 0
+        ? `<a href="/week" class="more" data-day="${k}" title="see the rest of this day in the weekly view">+${overflow} more &rarr;</a>`
+        : "";
+      html += `<div class="cal-head ${today ? "today" : ""} ${empty ? "empty" : ""}"><span class="dow">${fmtDow(k)}</span><span class="num">${fmtNum(k)}</span>${more}</div>`;
+    });
+
+    html += `<div class="gutter">`;
+    for (let h = GRID_START_HR; h < GRID_END_HR; h++) {
+      const label = (h % 12 === 0 ? 12 : h % 12) + (h < 12 || h === 24 ? "am" : "pm");
+      html += `<div class="hour">${label}</div>`;
+    }
+    html += `</div>`;
+
+    dayKeys.forEach(k => {
+      const today = k === TODAY_KEY;
+      const dayEvents = byDay.get(k);
+      // bounded top-12: recompute from the FILTERED set every render, take
+      // the 12 highest booze scores, then hand only those to the existing
+      // (unmodified) lane-packer.
+      const capped = dayEvents.length > DAY_CAP
+        ? [...dayEvents].sort((a, b) => b.booze - a.booze).slice(0, DAY_CAP)
+        : dayEvents;
+      const positions = layoutDay(capped);
+      html += `<div class="col ${today ? "today" : ""} ${dayEvents.length ? "" : "empty"}" style="height:calc(var(--hour-h) * ${HOURS})">`;
+      positions.forEach(p => { html += chipHtml(p); });
+      if (today) {
+        // real "now" line: only drawn while the actual current time-of-day
+        // falls inside the visible grid window (8am-midnight PT).
+        const nowP = tzParts(new Date().toISOString());
+        if (nowP.hour >= GRID_START_HR && nowP.hour < GRID_END_HR) {
+          const nowFrac = frac(nowP.hour, nowP.minute) * 100;
+          html += `<div class="now-line" style="top:${nowFrac.toFixed(3)}%"></div>`;
+        }
+      }
+      html += `</div>`;
+    });
+
+    cal.innerHTML = html;
+    bindChips();
+  }
+
+  function bindChips() {
+    document.querySelectorAll(".evt").forEach(chip => {
+      const id = chip.dataset.id;
+      const e = EVENTS.find(ev => ev.id === id);
+      chip.addEventListener("click", (ev) => { ev.stopPropagation(); openPopFor(chip, e); });
+      chip.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); openPopFor(chip, e); }
+        if (ev.key === "Escape") closePop();
+      });
+    });
+  }
+
+  // ---- booze slider = LIGHTING only ----
+  // It never changes the set of shown blocks and never re-packs lanes (the
+  // top-6 is chosen by booze from the hard-filtered pool, independent of
+  // where the bar sits). So on input we just re-toggle the "lit" (confident)
+  // class on the already-rendered blocks — cheap, smooth, and the 6 stay
+  // exactly put as they light up / dim.
+  const threshRange = document.getElementById("threshRange");
+  const threshRead = document.getElementById("threshRead");
+  // apply any restored (localStorage) threshold to the control before first render
+  threshRange.value = state.thresh;
+  threshRange.style.setProperty("--p", state.thresh);
+  threshRead.textContent = state.thresh + "%";
+  function relight() {
+    document.querySelectorAll(".evt").forEach(chip => {
+      const lit = parseInt(chip.dataset.booze, 10) >= state.thresh;
+      chip.classList.toggle("confident", lit);
+    });
+  }
+  threshRange.addEventListener("input", () => {
+    state.thresh = parseInt(threshRange.value, 10);
+    threshRange.style.setProperty("--p", state.thresh);
+    threshRead.textContent = state.thresh + "%";
+    saveF({ thresh: state.thresh });
+    relight();
+  });
+
+  // ---- distance stepper (FLAT seg) ----
+  const distSeg = document.getElementById("distSeg");
+  // reflect any restored distance cap onto the seg before the first render
+  distSeg.querySelectorAll("button").forEach(b => {
+    const mi = b.dataset.mi === "" ? null : parseFloat(b.dataset.mi);
+    if (mi === state.maxMi) b.setAttribute("aria-current", "true");
+    else b.removeAttribute("aria-current");
+  });
+  distSeg.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
+      btn.setAttribute("aria-current", "true");
+      const mi = btn.dataset.mi;
+      state.maxMi = mi === "" ? null : parseFloat(mi);
+      saveF({ maxMi: state.maxMi });
+      closePop();
+      render();
+    });
+  });
+
+  // ---- free toggle (STAMP; hard filter, mirrors week.html) ----
+  const freeToggle = document.getElementById("freeToggle");
+  // reflect any restored free state onto the stamp before the first render
+  freeToggle.setAttribute("aria-pressed", String(state.freeOnly));
+  freeToggle.addEventListener("click", () => {
+    state.freeOnly = !state.freeOnly;
+    freeToggle.setAttribute("aria-pressed", String(state.freeOnly));
+    saveF({ free: state.freeOnly });
+    closePop();
+    render();
+  });
+
+  // ---- tag + source chip popovers (same pattern as design_real.html) ----
+  // counts are over the full dataset (static), matching design_real's
+  // behavior and the deferred item noted in DESIGN.md.
+  const filterPopovers = [];
+
+  function makeChipPopover(btnId, panelId, labelBase, counts, stateSet, saveKey) {
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+    const keys = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
+    panel.innerHTML = keys.map(k =>
+      `<button type="button" class="fb-chip${stateSet.has(k) ? " on" : ""}" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
+    ).join("");
+    panel.querySelectorAll(".fb-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const k = chip.dataset.key;
+        if (stateSet.has(k)) stateSet.delete(k); else stateSet.add(k);
+        chip.classList.toggle("on", stateSet.has(k));
+        updateBtn();
+        saveF({ [saveKey]: [...stateSet] });
+        closePop();
+        render();
+      });
+    });
+    function updateBtn() {
+      if (stateSet.size) { btn.textContent = labelBase + " · " + stateSet.size; btn.classList.add("active"); }
+      else { btn.textContent = labelBase; btn.classList.remove("active"); }
+    }
+    // reflect any restored selection onto the trigger before the first render
+    updateBtn();
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const open = !panel.classList.contains("open");
+      filterPopovers.forEach(p => { p.panel.classList.remove("open"); p.btn.setAttribute("aria-expanded", "false"); });
+      panel.classList.toggle("open", open);
+      btn.setAttribute("aria-expanded", String(open));
+    });
+    filterPopovers.push({ btn, panel });
+  }
+
+  document.addEventListener("click", (ev) => {
+    filterPopovers.forEach(p => {
+      if (!p.panel.contains(ev.target) && ev.target !== p.btn) {
+        p.panel.classList.remove("open");
+        p.btn.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+
+  const tagCounts = new Map();
+  EVENTS.forEach(e => (e.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+  const sourceCounts = new Map();
+  EVENTS.forEach(e => sourceCounts.set(e.source, (sourceCounts.get(e.source) || 0) + 1));
+
+  makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags, "tags");
+  makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources, "sources");
+
+  render();
+})();
+</script>
+
 </body>
 </html>

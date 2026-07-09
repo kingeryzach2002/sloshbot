@@ -4,121 +4,710 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sloshbot — map</title>
+
+<!-- Leaflet from CDN — pinned to the version + tile source the production
+     map has always used (dark CARTO basemap). Loaded once, here only. -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 {% include "_theme.html" %}
+
 <style>
-  body { display: flex; flex-direction: column; height: 100vh; }
-  /* sit above Leaflet's map panes/controls so open filter dropdowns aren't clipped by the map */
-  .topwrap { padding: 16px 20px 0; position: relative; z-index: 1100; }
-  header { margin-bottom: 14px; }
-  .barrow { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
-  .barrow .filterbar { flex: 1; margin-bottom: 0; }
-  form.home { display: flex; gap: 6px; }
-  input[type=text] { background: var(--card2); border: 1px solid var(--line); color: var(--text);
-          border-radius: 9px; padding: 6px 11px; font-size: 13px; width: 240px; }
-  .note { color: var(--muted); font-size: 12px; padding: 8px 0 0; }
-  #map { flex: 1; }
-  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--card); color: var(--text); }
-  .pop b { font-size: 14px; }
-  .pop .m { color: var(--muted); font-size: 12px; }
-  .pop a { color: var(--gold); }
+  /* ---- site header/nav parity (kept from the pre-port map.html; _tokens.html
+     is variables-only and doesn't style these, so a little chrome lives here) ---- */
+  body { margin: 0; }
+  /* map keeps its own .site-header class (it's a full-bleed Leaflet page, not
+     the shared scrolling chrome), but the TABS must read identically to the
+     shared header: quiet muted labels, active one lit brass with a 2px
+     underslung brass bar. Mirrors _components.html's header nav treatment. */
+  .site-header { position: relative; z-index: 1150; box-sizing: border-box;
+        min-height: var(--hdr-h, 52px); padding: 0 20px;
+        display: flex; align-items: center; justify-content: space-between; gap: 24px;
+        background: var(--bg); border-bottom: 1px solid var(--line); }
+  .site-header h1.wordmark { font-family: var(--serif); font-style: italic; font-weight: 600;
+        font-size: 23px; line-height: 1; margin: 0; color: var(--text); }
+  .site-header h1.wordmark .tip { color: var(--gold); }
+  .site-header nav { display: flex; align-items: center; gap: 22px; }
+  .site-header nav a { position: relative; color: var(--muted); text-decoration: none;
+        font-family: var(--sans); font-size: 13.5px; letter-spacing: 0.05em;
+        padding-bottom: 4px; transition: color .18s var(--ease); }
+  .site-header nav a::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+        height: 2px; background: var(--gold); border-radius: 2px;
+        transform: scaleX(0); transform-origin: center; transition: transform .25s var(--ease); }
+  .site-header nav a:hover { color: var(--gold); }
+  .site-header nav a.active { color: var(--gold); }
+  .site-header nav a.active::after { transform: scaleX(1); }
+  .homebar { display: flex; align-items: center; gap: 12px; padding: 0 20px 10px;
+             flex-wrap: wrap; position: relative; z-index: 1150; }
+  .homebar form { display: flex; gap: 6px; }
+  .homebar input[type=text] { background: var(--card2); border: 1px solid var(--line);
+        color: var(--text); border-radius: 9px; padding: 6px 11px; font-size: 13px; width: 220px; }
+  .homebar .set-btn { font-size: 12px; font-weight: 650; color: var(--bg); background: var(--gold);
+        border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .homebar .note { color: var(--muted); font-size: 12px; }
+</style>
+
+<style>
+  /* ============================================================
+     Ported verbatim from design_map_live.html's page-specific style
+     block (block 2, ~lines 78-267) — Leaflet popup restyle, filter
+     bar, coupe/coaster chrome. Block 1 (34-77, a straight token copy
+     of _tokens.html) was dropped entirely since _theme.html already
+     includes _tokens.html.
+     ============================================================ */
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--text);
+         font-family: var(--sans); font-size: 15px; line-height: 1.5;
+         -webkit-font-smoothing: antialiased;
+         display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* ---- slim top bar (distance seg + tonight + tags/source) ---- */
+  .mb { flex: none; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+        row-gap: 8px; padding: 12px 20px; background: rgba(15,9,8,0.92);
+        border-bottom: 1px solid var(--line2); position: relative; z-index: 1200; }
+  .mb-filters { display: flex; align-items: center; gap: 10px;
+                flex-wrap: wrap; row-gap: 8px; }
+  .mb-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+            color: var(--faint); white-space: nowrap; }
+
+  /* ---- chance-of-booze slider (leading control) — copied verbatim from
+     week.html's .thresh rules so it reads identically to Week/Calendar.
+     The gold coupe-liquid disc thumb; --p tracks the current value. ---- */
+  .mb-ctl { display: flex; align-items: center; gap: 8px; }
+  .thresh { flex: 1 1 200px; min-width: 160px; max-width: 300px; }
+  .thresh-range { --p: 65; -webkit-appearance: none; appearance: none; flex: 1;
+                  height: 24px; margin: 0; min-width: 0; background: transparent;
+                  cursor: pointer; }
+  .thresh-range::-webkit-slider-runnable-track { height: 2px; border-radius: 99px;
+                  background: linear-gradient(to right,
+                    var(--gold) calc(var(--p) * 1%), var(--line2) calc(var(--p) * 1%)); }
+  .thresh-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+                  width: 18px; height: 18px; margin-top: -8px; border-radius: 50%;
+                  border: none;
+                  background: radial-gradient(circle closest-side,
+                    var(--gold) calc(var(--p) * 1%),
+                    transparent calc(var(--p) * 1% + 2%));
+                  box-shadow: 0 2px 7px -1px rgba(0,0,0,0.85); }
+  .thresh-range::-moz-range-track { height: 2px; border-radius: 99px; background: var(--line2); }
+  .thresh-range::-moz-range-progress { height: 2px; border-radius: 99px; background: var(--gold); }
+  .thresh-range::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%;
+                  border: none; box-sizing: border-box;
+                  background: radial-gradient(circle closest-side,
+                    var(--gold) calc(var(--p) * 1%),
+                    transparent calc(var(--p) * 1% + 2%));
+                  box-shadow: 0 2px 7px -1px rgba(0,0,0,0.85); }
+  .thresh-range:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px;
+                  border-radius: 4px; }
+  .thresh-read { font-variant-numeric: tabular-nums; color: var(--gold); font-size: 13px;
+                 font-weight: 600; width: 34px; text-align: right; flex: none; }
+
+  /* home-address setter tucked to the far right of the filter bar (quiet;
+     it's a setting, not a filter) */
+  .mb-home { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .mb-home input[type=text] { background: var(--card2); border: 1px solid var(--line2);
+        color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: 12.5px; width: 180px; }
+  .mb-home .set-btn { font-size: 11px; font-weight: 650; color: var(--bg); background: var(--gold);
+        border: none; border-radius: 8px; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
+  .mb-seg { display: inline-flex; gap: 2px; background: var(--card2);
+            border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
+  .mb-seg button { font: inherit; font-family: var(--mono); font-size: 11.5px;
+            font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer;
+            background: none; border: none; border-radius: 8px; padding: 4px 8px;
+            transition: color .18s, background .3s var(--ease), transform .12s var(--ease); }
+  .mb-seg button i { font-style: normal; }
+  .mb-seg button:hover { color: var(--text); }
+  .mb-seg button:active { transform: scale(0.96); }
+  .mb-seg button[aria-current="true"] { background: var(--gold); color: var(--bg); }
+  .mb-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .mb-stamp { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 10px;
+              cursor: pointer; flex: none;
+              transition: transform .12s var(--ease), color .15s, border-color .15s; }
+  .mb-stamp:hover { color: var(--text); border-color: var(--gold-dim); }
+  .mb-stamp:active { transform: scale(0.94) rotate(-2deg); }
+  .mb-stamp:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .mb-stamp[aria-pressed="true"] { color: var(--gold); border-color: var(--gold); transform: rotate(-3deg); }
+  .mb-pop { position: relative; flex: none; }
+  .mb-pop-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; white-space: nowrap;
+              transition: color .15s, border-color .15s, transform .12s var(--ease); }
+  .mb-pop-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+  .mb-pop-btn:active { transform: scale(0.96); }
+  .mb-pop-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .mb-pop-btn.active { color: var(--gold); border-color: var(--gold-dim); }
+  .mb-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 1300;
+              min-width: 210px; max-width: 280px;
+              background-color: var(--card2); background-image: var(--grain);
+              border: 1px solid var(--line2); border-radius: 16px; padding: 10px;
+              box-shadow: var(--elev-pop); display: none; flex-wrap: wrap; gap: 6px; }
+  .mb-panel.open { display: flex; }
+  .mb-chip { font-size: 11px; color: var(--muted); background: var(--card);
+             border: 1px solid var(--line2); border-radius: 99px; padding: 4px 10px;
+             cursor: pointer; transition: color .15s, border-color .15s, transform .12s var(--ease); }
+  .mb-chip:hover { color: var(--text); }
+  .mb-chip:active { transform: scale(0.96); }
+  .mb-chip .n { color: var(--faint); margin-left: 4px; }
+  .mb-chip.on { color: var(--gold); border-color: var(--gold-dim); }
+  .mb-chip.on .n { color: var(--gold-dim); }
+
+  /* ---- the Leaflet map fills the rest ---- */
+  .stage-wrap { position: relative; flex: 1; min-height: 0; }
+  #map { position: absolute; inset: 0; background: var(--bg); }
+  .leaflet-container { background: var(--bg); font-family: var(--sans); }
+
+  /* ---- pins: gold disc scaled + lit by booze (a DivIcon, styled here) ---- */
+  .pin { border-radius: 50%; background: var(--faint); cursor: pointer;
+         box-sizing: border-box;
+         transition: transform .18s var(--ease), box-shadow .25s var(--ease); }
+  .pin.confident { background: var(--gold); }
+  .pin:hover { transform: scale(1.4); }
+  .pin-wrap { background: none !important; border: none !important; }
+
+  /* home marker + micro-label */
+  .home-pin { width: 14px; height: 14px; border-radius: 50%;
+              border: 1.5px solid var(--gold); box-sizing: border-box;
+              background: radial-gradient(circle, var(--gold-glow), transparent 70%);
+              position: relative; }
+  .home-pin::after { content: ""; position: absolute; left: 50%; top: 50%;
+              width: 4px; height: 4px; background: var(--gold); border-radius: 50%;
+              transform: translate(-50%, -50%); }
+  .home-label { position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+              font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.12em;
+              color: var(--gold-dim); white-space: nowrap; }
+
+  /* ---- coupe glass (the real 40px drawing, verbatim from design_map.html) ---- */
+  .coupe { --p: 0; position: relative; width: 40px; height: 40px; flex: none; }
+  .coupe .glass { position: absolute; top: 4px; bottom: 8px; left: 50%; width: 34px;
+                  transform: translateX(-50%); overflow: hidden;
+                  border: 1.5px solid var(--gold-dim); border-top: none;
+                  border-radius: 0 0 40px 40px; background: rgba(0,0,0,0.25); }
+  .coupe.dim .glass { border-color: var(--line2); }
+  .coupe .liq { position: absolute; left: 0; right: 0; bottom: 0;
+                height: calc(var(--p) * 1%); background: var(--gold); opacity: 0.85;
+                transition: height .6s var(--ease); }
+  .coupe.dim .liq { background: var(--faint); opacity: 0.6; }
+  .coupe .stem { position: absolute; left: 50%; bottom: 2px; width: 1.5px; height: 8px;
+                 background: var(--gold-dim); transform: translateX(-50%); }
+  .coupe .foot { position: absolute; left: 50%; bottom: 1px; width: 18px; height: 1.5px;
+                 background: var(--gold-dim); transform: translateX(-50%); }
+  .coupe.dim .stem, .coupe.dim .foot { background: var(--line2); }
+
+  /* ---- popup content (title, meta, blurb, hold) — coaster material ---- */
+  .ta-top { display: flex; align-items: flex-start; gap: 14px; }
+  .ta-title { flex: 1; min-width: 0; font-family: var(--serif); font-weight: 600;
+              font-size: 18px; line-height: 1.08; letter-spacing: -0.01em;
+              color: var(--text); text-wrap: balance; }
+  .ta-meta { color: var(--meta); font-size: 12.5px; margin-top: 6px; letter-spacing: 0.005em;
+             font-variant-numeric: oldstyle-nums proportional-nums; }
+  .ta-meta .free { color: var(--green); }
+  .ta-why { font-family: var(--serif); font-style: italic; font-weight: 400;
+            font-size: 13.5px; line-height: 1.42; color: var(--muted); margin: 8px 0 2px;
+            text-wrap: pretty;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+            overflow: hidden; }
+  .ta-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px;
+             justify-content: flex-end; }
+  .ta-tags { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; }
+  .ta-tags span { font-size: 11px; color: var(--muted); background: var(--card2);
+                  border: 1px solid var(--line2); border-radius: 99px; padding: 2px 9px; }
+  /* + hold — a KEY: depresses hard (gold-press edge collapses) */
+  .ta-hold { font-size: 12.5px; font-weight: 650; color: var(--bg); background: var(--gold);
+             border: none; border-radius: 8px; padding: 7px 14px; cursor: pointer;
+             box-shadow: 0 3px 0 var(--gold-press), 0 6px 12px -6px rgba(0,0,0,0.8);
+             transition: transform .1s var(--ease), box-shadow .1s var(--ease); }
+  .ta-hold:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--gold-press), 0 8px 14px -6px rgba(0,0,0,0.8); }
+  .ta-hold:active { transform: translateY(3px); box-shadow: 0 0 0 var(--gold-press), 0 2px 6px -4px rgba(0,0,0,0.8); }
+  .ta-hold:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+  /* ---- restyle Leaflet's popup shell into the coaster material ---- */
+  .leaflet-popup-content-wrapper {
+    background: var(--grain), radial-gradient(120% 80% at 50% -10%, var(--sheen), transparent 60%),
+                linear-gradient(180deg, var(--surf-hi), var(--surf-lo));
+    color: var(--text); border: 1px solid var(--line2); border-radius: var(--r-card);
+    box-shadow: var(--elev-pop); }
+  .leaflet-popup-content { margin: 15px 16px; width: 264px !important; }
+  .leaflet-popup-tip { background: var(--card2); border: 1px solid var(--line2);
+                       box-shadow: none; }
+  .leaflet-popup-close-button { color: var(--faint) !important; }
+  .leaflet-popup-close-button:hover { color: var(--text) !important; }
+  .leaflet-container a.leaflet-popup-close-button { padding: 6px 8px 0 0; }
+
+  /* Leaflet tooltip (hover = title) in brass */
+  .leaflet-tooltip.pin-tip { background: var(--card2); border: 1px solid var(--line2);
+                             color: var(--text); border-radius: 8px; box-shadow: var(--elev-pop);
+                             font-family: var(--sans); font-size: 11.5px; padding: 5px 9px; }
+  .leaflet-tooltip.pin-tip::before { border-top-color: var(--line2); }
+
+  /* attribution kept legible but quiet on the dark ground */
+  .leaflet-control-attribution { background: rgba(15,9,8,0.7) !important;
+    color: var(--faint) !important; }
+  .leaflet-control-attribution a { color: var(--gold-dim) !important; }
+  .leaflet-bar a { background: var(--card2); color: var(--text); border-bottom-color: var(--line2); }
+  .leaflet-bar a:hover { background: var(--card); }
+
+  /* ---- unplaced row pinned to the bottom edge ---- */
+  .unplaced-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1100;
+                  background: rgba(15,9,8,0.92); border-top: 1px solid var(--line2);
+                  padding: 8px 20px; font-size: 12px; color: var(--faint); }
+  .unplaced-bar summary { cursor: pointer; list-style: none; }
+  .unplaced-bar summary::-webkit-details-marker { display: none; }
+  .unplaced-bar summary:hover { color: var(--muted); }
+  .unplaced-bar summary::before { content: "\2022  "; color: var(--gold-dim); }
+  .unplaced-list { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px;
+                    padding-top: 8px; border-top: 1px solid var(--line); }
+  .unplaced-list span { white-space: nowrap; }
+  .unplaced-list .un-b { color: var(--muted); }
+
+  @media (max-width: 640px) {
+    .mb { padding: 10px 14px; }
+    .mb-filters { gap: 6px; }
+    .mb-seg button i { display: none; }
+  }
 </style>
 </head>
 <body>
-<div class="topwrap">
-  <header>
-    <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
-    <nav>
-      <a href="/">Tonight</a>
-      <a href="/week">This week</a>
-      <a href="/calendar">Calendar</a>
-      <a href="/map" class="active">Map</a>
-    </nav>
-  </header>
 
-  <div class="barrow">
-    {% include "_filterbar.html" %}
-    <form class="home" method="post" action="/settings/home">
-      <input type="text" name="home_address" placeholder="home address (for distances)"
-             value="{{ home_address }}">
-      <button class="btn primary" type="submit">{{ 'Update home' if home_address else 'Set home' }}</button>
-    </form>
+<header class="site-header">
+  <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
+  <nav>
+    <a href="/">Tonight</a>
+    <a href="/week">This week</a>
+    <a href="/calendar">Calendar</a>
+    <a href="/map" class="active">Map</a>
+  </nav>
+</header>
+
+<!-- ============================================================
+     Ported verbatim (minus the prototype's own wordmark, which
+     would duplicate the site header above) from design_map_live.html's
+     body (~line 269 on): filter bar (distance seg / tonight / tags /
+     source), the Leaflet stage, and the unplaced-events bar.
+     ============================================================ -->
+<div class="mb">
+  <div class="mb-ctl thresh">
+    <span class="mb-lbl">chance of booze</span>
+    <input type="range" min="0" max="100" step="1" value="65"
+           class="thresh-range" id="threshRange"
+           aria-label="minimum booze confidence percent">
+    <span class="thresh-read" id="threshRead">65%</span>
   </div>
-  {% if n_unmapped %}<div class="note">{{ n_unmapped }} event(s) have no location and aren't shown —
-    run <code>uv run python -m ingest.geocode</code> to backfill.</div>{% endif %}
+  <div class="mb-filters">
+    <span class="mb-lbl">distance</span>
+    <div class="mb-seg" id="distSeg" role="group" aria-label="distance cap">
+      <button type="button" data-mi="" aria-current="true">any</button>
+      <button type="button" data-mi="1">1<i>mi</i></button>
+      <button type="button" data-mi="2">2<i>mi</i></button>
+      <button type="button" data-mi="3">3<i>mi</i></button>
+      <button type="button" data-mi="5">5<i>mi</i></button>
+    </div>
+    <button type="button" class="mb-stamp" id="tonightToggle" aria-pressed="false">tonight</button>
+    <button type="button" class="mb-stamp" id="freeToggle" aria-pressed="false">free</button>
+    <div class="mb-pop">
+      <button type="button" class="mb-pop-btn" id="tagsBtn" aria-expanded="false">tags</button>
+      <div class="mb-panel" id="tagsPanel"></div>
+    </div>
+    <div class="mb-pop">
+      <button type="button" class="mb-pop-btn" id="sourceBtn" aria-expanded="false">source</button>
+      <div class="mb-panel" id="sourcePanel"></div>
+    </div>
+  </div>
+  <form class="mb-home" method="post" action="/settings/home">
+    <input type="text" name="home_address" placeholder="home address (for distances)" value="{{ home_address }}">
+    <button class="set-btn" type="submit">{{ 'Update home' if home_address else 'Set home' }}</button>
+  </form>
 </div>
-<div id="map"></div>
+<div class="stage-wrap">
+  <div id="map"></div>
+  <details class="unplaced-bar" id="unplacedBar"></details>
+</div>
+
+<!-- DATA SEAM: server-rendered map_json (built in main.py's map_view(), see
+     PORT_SPEC §6 /map) replaces the prototype's baked fixture. Shape:
+     {"home": {"lat","lon"} | null, "pins": [{id, title, venue, neighborhood,
+     starts_at, is_free, lat, lon, distance_mi, booze (0-100 int), blurb,
+     tags, source, url, gcal}]}. The title links to `url` and "+ hold" opens
+     `gcal` (both added to the map_json pin shape in main.py's map_view). -->
+<script id="map-data" type="application/json">{{ map_json | safe }}</script>
 
 <script>
-  const pins = {{ pins | tojson }};
-  const home = {{ home | tojson }};
+(function () {
+  const DATA = JSON.parse(document.getElementById("map-data").textContent);
+  const HOME = DATA.home || null;
+  const PINS = DATA.pins || [];
+  const UNPLACED = DATA.unplaced || []; // not emitted by map_json today; guarded for forward-compat
+  const MI_M = 1609.34;
 
-  const map = L.map("map").setView(home ? [home.lat, home.lon] : [37.7749, -122.4194], 13);
+  // live pour line — set by the "chance of booze" slider (mirrors Week/Calendar).
+  // A pin whose booze >= state.thresh lights gold (.confident); below it stays dim.
+  // The slider never removes pins — every venue's location always shows.
+  const state = { thresh: 65, maxMi: null, tonightOnly: false, free: false, tags: new Set(), sources: new Set() };
+
+  // ---- shared cross-page filter store (week/calendar/map all read+merge-patch
+  // the ONE localStorage object "slosh.filters"). loadF returns the whole object;
+  // saveF merge-patches a single key so pages never clobber each other's fields. ----
+  function loadF() { try { return JSON.parse(localStorage.getItem("slosh.filters")) || {}; } catch (_) { return {}; } }
+  function saveF(patch) { try { localStorage.setItem("slosh.filters", JSON.stringify(Object.assign(loadF(), patch))); } catch (_) {} }
+
+  // apply restored filters into state BEFORE any pins render, so the very first
+  // pass sizes/lights AND filters correctly. DOM controls (slider, distance seg,
+  // free stamp, chips) are reflected where each is wired up, below.
+  const f = loadF();
+  if (typeof f.thresh === "number" && f.thresh >= 0 && f.thresh <= 100) state.thresh = f.thresh;
+  if (f.maxMi === null || typeof f.maxMi === "number") state.maxMi = f.maxMi;
+  if (typeof f.free === "boolean") state.free = f.free;
+  state.tags = new Set(f.tags || []);
+  state.sources = new Set(f.sources || []);
+
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  const TODAY = todayStr();
+
+  // ---- helpers ----
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+  // scraped venue_name sometimes carries a full street address after a comma;
+  // keep only the leading name (matches week.html's cleanVenue)
+  function cleanVenue(name) {
+    if (!name) return "";
+    const idx = name.indexOf(",");
+    return (idx === -1 ? name : name.slice(0, idx)).trim();
+  }
+  // booze -> disc geometry. SIZE is a FIXED function of the pin's own booze
+  // ONLY (never the slider). A power curve (exponent 1.7) shrinks low-booze dots
+  // hard; radius runs R_MIN (2.5) -> R_MAX (9), i.e. diameter 5px -> ~18px (about
+  // 30% smaller than the previous 26px max). Moving the pour line NEVER resizes a
+  // dot — the confident/dim decision (and the opacity/glow that go with being
+  // "lit") stay threshold-driven: booze >= state.thresh lights gold, below stays
+  // dim. Mirrors the Calendar "lights up, doesn't resize" behavior.
+  const R_MIN = 2.5, R_MAX = 9;
+  function pinSize(booze) {
+    const b = Math.min(Math.max(booze, 0), 100);
+    const t = b / 100;
+    const r = R_MIN + (R_MAX - R_MIN) * Math.pow(t, 1.7);   // static power curve
+    const confident = booze >= state.thresh;     // lit vs. dim: the ONLY threshold effect
+    return { r, confident, opacity: confident ? 0.9 : 0.55 };
+  }
+
+  // build a pin's DivIcon from its current booze vs. the live pour line — the
+  // single source of truth for both initial render and slider re-lighting.
+  function makePinIcon(pin) {
+    const s = pinSize(pin.booze);
+    const d = Math.round(s.r * 2);
+    const glow = s.confident ? `box-shadow:0 0 ${Math.round(6 + s.r)}px -1px var(--gold-glow);` : "";
+    const html = `<div class="pin ${s.confident ? "confident" : ""}"
+        style="width:${d}px;height:${d}px;opacity:${s.opacity.toFixed(2)};${glow}"></div>`;
+    return L.divIcon({ className: "pin-wrap", html, iconSize: [d, d], iconAnchor: [d / 2, d / 2] });
+  }
+
+  // ---------------------------------------------------------------
+  // MAP: real Leaflet, CARTO dark tiles (the exact URL/subdomains/
+  // attribution/maxZoom the current production map.html has always used).
+  // Centered on home when set; otherwise falls back to a SF-wide default
+  // view (no-home is a real, supported state — see PORT_SPEC §3).
+  // ---------------------------------------------------------------
+  const FALLBACK_CENTER = [37.7749, -122.4194];
+  const map = L.map("map", { zoomControl: true })
+    .setView(HOME ? [HOME.lat, HOME.lon] : FALLBACK_CENTER, HOME ? 13 : 12);
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19,
   }).addTo(map);
 
-  const style = t => t === "confident"
-    ? { radius: 9, color: "#e8b34b", fillColor: "#e8b34b", fillOpacity: 0.85, weight: 2 }
-    : { radius: 6, color: "#a39a8e", fillColor: "#6b6258", fillOpacity: 0.6, weight: 1 };
-
-  const pinLayer = L.layerGroup().addTo(map);
-
-  function redrawPins(pinList) {
-    pinLayer.clearLayers();
-    for (const p of pinList) {
-      L.circleMarker([p.lat, p.lon], style(p.tier)).addTo(pinLayer).bindPopup(`
-        <div class="pop">
-          <b>${p.title}</b><br>
-          <span class="m">${p.when} · ${p.venue}${p.distance !== null ? ` · ${p.distance} mi from home` : ""}</span><br>
-          <span class="m">🍸 ${p.booze}% free-booze likelihood</span><br>
-          <a href="${p.url}" target="_blank">event page</a> ·
-          <a href="${p.gcal}" target="_blank">+ hold on calendar</a>
-        </div>`);
-    }
+  // ---- distance rings at 1/2/3 mi (dashed gold-dim, no fill, non-interactive) ----
+  // only meaningful (and only drawn) when a home is set.
+  const ringLayers = {};
+  if (HOME) {
+    [1, 2, 3].forEach(mi => {
+      ringLayers[mi] = L.circle([HOME.lat, HOME.lon], {
+        radius: mi * MI_M, interactive: false,
+        color: "#8a6733", weight: 1, opacity: 0.35, fill: false, dashArray: "4 6",
+      }).addTo(map);
+    });
+  }
+  function emphasizeRing() {
+    if (!HOME) return;
+    [1, 2, 3].forEach(mi => {
+      const active = state.maxMi === mi;
+      ringLayers[mi].setStyle({
+        color: active ? "#d0a04a" : "#8a6733",
+        opacity: active ? 0.7 : (state.maxMi !== null && mi > state.maxMi ? 0.12 : 0.35),
+        weight: active ? 1.5 : 1,
+      });
+    });
   }
 
-  function fmtWhen(iso) {
-    const d = new Date(iso);
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    let h = d.getHours();
-    const ampm = h >= 12 ? "PM" : "AM";
-    h = h % 12 || 12;
-    const min = String(d.getMinutes()).padStart(2, "0");
-    return `${days[d.getDay()]} ${h}:${min} ${ampm}`;
+  // ---- home marker: a gold ring dot + 'home' micro-label (a DivIcon) ----
+  if (HOME) {
+    L.marker([HOME.lat, HOME.lon], {
+      interactive: false, keyboard: false, zIndexOffset: -100,
+      icon: L.divIcon({
+        className: "pin-wrap",
+        html: '<div class="home-pin"></div><div class="home-label">home</div>',
+        iconSize: [14, 14], iconAnchor: [7, 7],
+      }),
+    }).addTo(map);
   }
 
+  // ---------------------------------------------------------------
+  // PINS as Leaflet markers with a styled DivIcon (Leaflet projects).
+  // Each marker carries its event for filtering; hover tooltip = title;
+  // click = one coaster popup (Leaflet closes any previously open one).
+  // ---------------------------------------------------------------
+  const markers = PINS.map(pin => {
+    const s = pinSize(pin.booze);
+    const d = Math.round(s.r * 2);
+    const marker = L.marker([pin.lat, pin.lon], {
+      icon: makePinIcon(pin),
+      riseOnHover: true,
+    });
+    marker._pin = pin;
+    marker.bindTooltip(escapeHtml(pin.title), { className: "pin-tip", direction: "top", offset: [0, -d / 2] });
+    marker.bindPopup(popupHtml(pin), { className: "coaster-pop", maxWidth: 300, closeButton: true, autoPan: true });
+    return marker;
+  });
+
+  function popupHtml(pin) {
+    const dim = pin.booze >= state.thresh ? "" : "dim";
+    const tags = (pin.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join("");
+    // is_free is 0/1/null from the server (not a JS boolean) — 1 is truthy
+    // (shows "free"), 0 and null are both falsy (no chip), matching the
+    // 3-state handling PORT_SPEC §2 calls for.
+    // lead with the neighborhood when we have one; fall back to the cleaned
+    // venue name only when neighborhood is empty (never the raw street address)
+    const place = pin.neighborhood ? escapeHtml(pin.neighborhood)
+      : (cleanVenue(pin.venue) ? escapeHtml(cleanVenue(pin.venue)) : null);
+    const metaBits = [
+      fmtTime(pin.starts_at),
+      pin.is_free ? '<span class="free">free</span>' : null,
+      place,
+      pin.distance_mi !== null ? pin.distance_mi.toFixed(1) + " mi" : null,
+    ].filter(Boolean).join(" &middot; ");
+    const title = pin.url
+      ? `<a href="${escapeHtml(pin.url)}" target="_blank" rel="noopener">${escapeHtml(pin.title)}</a>`
+      : escapeHtml(pin.title);
+    return `<div class="ta-top">
+        <span class="ta-title">${title}</span>
+        <span class="coupe ${dim}" style="--p:${pin.booze}" title="${pin.booze}%">
+          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+        </span>
+      </div>
+      <div class="ta-meta">${metaBits}</div>
+      <p class="ta-why">${escapeHtml(pin.blurb || "")}</p>
+      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(pin.gcal || "")}">+ calendar</button></div>`;
+  }
+  // "+ hold" opens the event's Google Calendar link (popups are built dynamically by Leaflet, so delegate)
+  document.addEventListener("click", (ev) => {
+    const b = ev.target.closest(".ta-hold");
+    if (b && b.dataset.gcal) window.open(b.dataset.gcal, "_blank", "noopener");
+  });
+
+  const markerLayer = L.layerGroup(markers).addTo(map);
+
+  // fit to the actual data when there's no home to anchor the initial view
+  // (mirrors the pre-port map.html's fitBounds fallback).
+  if (!HOME && PINS.length) {
+    map.fitBounds(PINS.map(p => [p.lat, p.lon]), { padding: [40, 40], maxZoom: 14 });
+  }
+
+  // ---------------------------------------------------------------
+  // FILTERS: distance cap (+ ring emphasis), tonight, tags, source —
+  // all AND'd. A marker that fails is removed from the layer; one that
+  // passes is (re)added. Leaflet keeps positions; we only toggle presence.
+  // Null-distance events aren't excluded by the distance filter (matches
+  // filters.apply's own "null always passes" behavior server-side).
+  // ---------------------------------------------------------------
+  function pinPasses(p) {
+    if (state.maxMi !== null && p.distance_mi !== null && p.distance_mi > state.maxMi) return false;
+    if (state.tonightOnly && p.starts_at.slice(0, 10) !== TODAY) return false;
+    // is_free is 0/1/null from the server — only 1 (truthy) counts as free
+    if (state.free && !p.is_free) return false;
+    if (state.tags.size && (p.tags || []).length && !p.tags.some(t => state.tags.has(t))) return false;
+    if (state.sources.size && !state.sources.has(p.source)) return false;
+    return true;
+  }
+  function applyFilters() {
+    markers.forEach(m => {
+      const show = pinPasses(m._pin);
+      const on = markerLayer.hasLayer(m);
+      if (show && !on) markerLayer.addLayer(m);
+      else if (!show && on) markerLayer.removeLayer(m);
+    });
+    emphasizeRing();
+    updateUnplaced();
+  }
+
+  // ---- chance-of-booze slider -> re-light pins (lit gold vs. dim), never hide.
+  // Mirrors Calendar's "lights up, not filters": every venue stays on the map;
+  // moving the slider only re-classes each pin against the new pour line and
+  // rebuilds its popup coupe. ~160 pins, so a plain synchronous pass is fine. --
+  function relightPins() {
+    markers.forEach(m => {
+      m.setIcon(makePinIcon(m._pin));
+      m.setTooltipContent(escapeHtml(m._pin.title));
+      m.setPopupContent(popupHtml(m._pin));
+    });
+  }
+  const threshInput = document.getElementById("threshRange");
+  const threshRead = document.getElementById("threshRead");
+  // reflect any restored (localStorage) threshold onto the control before use
+  threshInput.value = state.thresh;
+  threshInput.style.setProperty("--p", state.thresh);
+  threshRead.textContent = state.thresh + "%";
+  threshInput.addEventListener("input", () => {
+    state.thresh = parseInt(threshInput.value, 10);
+    threshInput.style.setProperty("--p", state.thresh);   // liquid-disc fill
+    threshRead.textContent = state.thresh + "%";
+    saveF({ thresh: state.thresh });
+    relightPins();
+  });
+
+  // ---- distance seg (reflect restored maxMi onto the segmented control) ----
+  const distSeg = document.getElementById("distSeg");
+  distSeg.querySelectorAll("button").forEach(b => {
+    const bmi = b.dataset.mi === "" ? null : parseFloat(b.dataset.mi);
+    if (bmi === state.maxMi) b.setAttribute("aria-current", "true");
+    else b.removeAttribute("aria-current");
+  });
+  distSeg.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
+      btn.setAttribute("aria-current", "true");
+      state.maxMi = btn.dataset.mi === "" ? null : parseFloat(btn.dataset.mi);
+      saveF({ maxMi: state.maxMi });
+      applyFilters();
+    });
+  });
+
+  // ---- tonight toggle ----
+  const tonightToggle = document.getElementById("tonightToggle");
+  tonightToggle.addEventListener("click", () => {
+    state.tonightOnly = !state.tonightOnly;
+    tonightToggle.setAttribute("aria-pressed", String(state.tonightOnly));
+    applyFilters();
+  });
+
+  // ---- free toggle (restricts to is_free === 1; 0/null not free) ----
+  const freeToggle = document.getElementById("freeToggle");
+  freeToggle.setAttribute("aria-pressed", String(state.free));   // reflect restored state
+  freeToggle.addEventListener("click", () => {
+    state.free = !state.free;
+    freeToggle.setAttribute("aria-pressed", String(state.free));
+    saveF({ free: state.free });
+    applyFilters();
+  });
+
+  // ---- tags + source chip popovers (same pattern as design_map.html) ----
+  const panels = [];
+  function makeChipPopover(btnId, panelId, labelBase, counts, stateSet, persistKey) {
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+    const keys = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
+    panel.innerHTML = keys.map(k =>
+      `<button type="button" class="mb-chip${stateSet.has(k) ? " on" : ""}" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
+    ).join("");
+    // reflect any restored selection onto the trigger label/active state
+    btn.textContent = stateSet.size ? labelBase + " · " + stateSet.size : labelBase;
+    btn.classList.toggle("active", stateSet.size > 0);
+    panel.querySelectorAll(".mb-chip").forEach(chip => {
+      chip.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const k = chip.dataset.key;
+        if (stateSet.has(k)) stateSet.delete(k); else stateSet.add(k);
+        chip.classList.toggle("on", stateSet.has(k));
+        btn.textContent = stateSet.size ? labelBase + " · " + stateSet.size : labelBase;
+        btn.classList.toggle("active", stateSet.size > 0);
+        saveF({ [persistKey]: [...stateSet] });
+        applyFilters();
+      });
+    });
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const open = !panel.classList.contains("open");
+      panels.forEach(p => { p.panel.classList.remove("open"); p.btn.setAttribute("aria-expanded", "false"); });
+      panel.classList.toggle("open", open);
+      btn.setAttribute("aria-expanded", String(open));
+    });
+    panel.addEventListener("click", (ev) => ev.stopPropagation());
+    panels.push({ btn, panel });
+  }
+  document.addEventListener("click", () => {
+    panels.forEach(p => { p.panel.classList.remove("open"); p.btn.setAttribute("aria-expanded", "false"); });
+  });
+  const tagCounts = new Map();
+  PINS.forEach(p => (p.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+  const sourceCounts = new Map();
+  PINS.forEach(p => sourceCounts.set(p.source, (sourceCounts.get(p.source) || 0) + 1));
+  makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags, "tags");
+  makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources, "sources");
+
+  // ---- unplaced row (source inferable from id prefix; reflects source filter) ----
+  const unplacedBar = document.getElementById("unplacedBar");
+  function updateUnplaced() {
+    const shown = UNPLACED.filter(u => !state.sources.size || state.sources.has(u.id.split(":")[0]));
+    if (!shown.length) { unplacedBar.style.display = "none"; return; }
+    unplacedBar.style.display = "";
+    unplacedBar.innerHTML = `<summary>${shown.length} more, address unknown</summary>
+      <div class="unplaced-list">${shown.map(u =>
+        `<span>${escapeHtml(u.title)}<span class="un-b"> &middot; ${u.booze}%</span></span>`
+      ).join("")}</div>`;
+  }
+
+  // ---- init: apply restored filters to the markers already on the map
+  // (also emphasizes rings + renders the unplaced row) ----
+  applyFilters();
+
+  // ---------------------------------------------------------------
+  // Re-fetch path for server-side filtering (kept from the pre-port
+  // map.html: window.applyPageUpdate(qs) + /api/events, in case
+  // _filterbar.html or any other caller still drives this page via
+  // querystring updates). Maps the response through the same pin-shape
+  // used for the initial server-embedded data.
+  // ---------------------------------------------------------------
   function eventToPin(e) {
     return {
-      lat: e.lat, lon: e.lon, title: e.title, tier: e.tier, url: e.url, gcal: e.gcal,
-      when: fmtWhen(e.start_dt),
-      venue: e.venue_name || "",
-      booze: Math.round((e.scores.booze || 0) * 100),
-      distance: e.distance_mi != null ? Math.round(e.distance_mi * 10) / 10 : null,
+      id: e.id, lat: e.lat, lon: e.lon, title: e.title, source: e.source,
+      starts_at: e.starts_at, is_free: e.is_free,
+      venue: e.venue_name || "", neighborhood: e.neighborhood,
+      booze: Math.round(((e.scores || {}).booze || 0) * 100),
+      blurb: e.description ? (e.description.length > 150
+        ? e.description.slice(0, e.description.lastIndexOf(" ", 150)) + "…"
+        : e.description) : "",
+      distance_mi: e.distance_mi != null ? Math.round(e.distance_mi * 10) / 10 : null,
+      tags: e.tags || [],
     };
   }
 
   window.applyPageUpdate = async (qs) => {
     const r = await fetch("/api/events?" + qs);
     const { events } = await r.json();
-    redrawPins(events.filter(e => e.lat != null).map(eventToPin));
+    const newPins = events.filter(e => e.lat != null).map(eventToPin);
+    markerLayer.clearLayers();
+    markers.length = 0;
+    newPins.forEach(pin => {
+      const s = pinSize(pin.booze);
+      const d = Math.round(s.r * 2);
+      const marker = L.marker([pin.lat, pin.lon], {
+        icon: makePinIcon(pin),
+        riseOnHover: true,
+      });
+      marker._pin = pin;
+      marker.bindTooltip(escapeHtml(pin.title), { className: "pin-tip", direction: "top", offset: [0, -d / 2] });
+      marker.bindPopup(popupHtml(pin), { className: "coaster-pop", maxWidth: 300, closeButton: true, autoPan: true });
+      markers.push(marker);
+      markerLayer.addLayer(marker);
+    });
+    applyFilters();
   };
-
-  redrawPins(pins);
-
-  if (home) {
-    L.marker([home.lat, home.lon]).addTo(map).bindPopup("<b>home</b>");
-    for (const mi of [1, 2, 3])
-      L.circle([home.lat, home.lon], { radius: mi * 1609.34, color: "#8a6a2a",
-        fill: false, weight: 1, opacity: 0.35, dashArray: "4 6" }).addTo(map);
-  }
-
-  if (pins.length) {
-    const pts = pins.map(p => [p.lat, p.lon]);
-    if (home) pts.push([home.lat, home.lon]);
-    map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 });
-  }
+})();
 </script>
 </body>
 </html>

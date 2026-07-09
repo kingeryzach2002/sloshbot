@@ -5,58 +5,207 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {% if warming_up %}<meta http-equiv="refresh" content="12">{% endif %}
 <title>sloshbot</title>
-{% import "_meter.html" as m %}
 {% include "_theme.html" %}
 <style>
-  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
+  /* ---- ported from design_day.html: tokens + the "tactile/coaster" card
+         system it depends on (its own second style block only adds the
+         day-view-specific chrome layered on top of these). ---- */
+  :root {
+    --bg: #0e0c09; --card: #16120e; --card2: #1c1712;
+    --text: #ede6da; --muted: #9a8d7d; --faint: #6e6355;
+    --line: #292219; --line2: #362c1f;
+    --gold: #e8b34b; --gold-dim: #8a6a2a; --gold-glow: rgba(232, 179, 75, 0.10);
+    --cool: #8fa39b; --green: #7fb069; --red: #c96f5e;
+    --serif: "Fraunces", Georgia, serif;
+    --sans: "Hanken Grotesk", -apple-system, "Segoe UI", Helvetica, sans-serif;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --ease: cubic-bezier(0.2, 0.9, 0.3, 1.15);
+    --meta: var(--cool);
+    --surf-hi: var(--card2); --surf-lo: var(--card);
+    --sheen: rgba(237, 230, 218, 0.05);
+    --sheen-c: rgba(232, 179, 75, 0.14);
+    --gold-press: #9a7126;
+  }
+  /* === brass & oxblood — the locked palette (see DESIGN.md) === */
+  .lab[data-pal="brass"] {
+    --bg: #0f0908; --card: #170f0c; --card2: #201512;
+    --text: #efe4d6; --muted: #b49c86; --faint: #96806d;
+    --line: #2c2019; --line2: #3d2b22;
+    --gold: #d0a04a; --gold-dim: #8a6733; --gold-glow: rgba(208, 160, 74, 0.12);
+    --gold-press: #9a7126; --sheen-c: rgba(208, 160, 74, 0.14);
+    --meta: #c8af99; --green: #93a05a; --red: #c26a5f;
+  }
+  .lab { background: var(--bg); color: var(--text);
+         font-family: var(--sans); font-size: 15px; line-height: 1.5;
+         min-height: 100vh; padding: 0 0 120px;
+         -webkit-font-smoothing: antialiased; }
+  .lab * { box-sizing: border-box; }
 
-  .debrief { background: var(--card2); border: 1px solid var(--gold-dim); border-radius: 12px;
-             padding: 14px 16px; margin-bottom: 22px; }
-  .debrief .q { color: var(--muted); font-size: 13.5px; margin: 8px 0 4px; }
-  .debrief .t { font-weight: 650; }
-  .debrief .dismiss { float: right; color: var(--faint); font-size: 12px; text-decoration: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .lab *, .lab *::before, .lab *::after { animation-duration: .001ms !important;
+      transition-duration: .001ms !important; }
+  }
 
-  /* the hero is the only place gold is allowed to be loud */
-  .hero { background: linear-gradient(160deg, var(--card) 0%, #1a1409 100%);
-          border: 1px solid var(--gold-dim); border-radius: 16px;
-          padding: 24px 24px 22px; margin-bottom: 26px; position: relative;
-          box-shadow: 0 0 48px -12px var(--gold-glow),
-                      inset 0 1px 0 rgba(232, 179, 75, 0.08); }
-  .hero .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em;
-                 color: var(--gold); margin-bottom: 10px; }
-  .hero .label .pulse { margin-bottom: 3px; }
-  .hero .title { font-family: var(--serif); font-weight: 600; font-size: 27px;
-                 line-height: 1.2; letter-spacing: 0; }
-  .hero .title a { color: var(--text); text-decoration: none; transition: color .15s; }
-  .hero .title a:hover { color: var(--gold); }
-  .hero .meta { color: var(--cool); font-size: 13.5px; margin-top: 8px; }
-  .hero .arc.lg { position: absolute; top: 22px; right: 22px; }
-  .hero .why { margin: 14px 0 0; padding: 10px 12px; background: rgba(0, 0, 0, 0.25);
-               border-radius: 10px; font-size: 13.5px; color: var(--muted); }
-  .hero .why b { color: var(--text); }
-  .hero .actions { margin-top: 16px; }
+  /* =====================================================================
+     C · TACTILE — "The Coaster" card system now lives in the shared
+     _components.html (included via _theme.html); this view only keeps
+     its own overrides below (elevation ramp, hero/day-specific chrome).
+     ===================================================================== */
 
-  details.section > summary { cursor: pointer; color: var(--faint); font-size: 12px;
-    text-transform: uppercase; letter-spacing: 0.08em; margin: 20px 0 10px;
-    transition: color .15s; }
-  details.section > summary:hover { color: var(--muted); }
-  .crow { border-bottom: 1px solid var(--line); }
-  .crow > summary { cursor: pointer; list-style: none; display: flex; gap: 10px;
-                    align-items: baseline; padding: 8px 2px; font-size: 13.5px;
-                    transition: background .15s; }
-  .crow > summary:hover { background: var(--card); }
-  .crow > summary::-webkit-details-marker { display: none; }
-  .crow .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .crow .w { color: var(--cool); font-size: 12px; white-space: nowrap; }
-  .crow .m { width: 34px; text-align: right; }
-  .crow .m .arc { width: 16px; height: 16px; display: inline-block; vertical-align: -3px; }
-  .crow[open] { background: var(--card); border-radius: 10px; padding: 0 8px 8px; }
-  h3.dayhead { font-family: var(--serif); font-style: italic; font-weight: 600;
-               font-size: 14px; color: var(--muted); margin: 16px 0 2px; }
+  .note { color: var(--faint); font-size: 12px; margin-top: 28px; text-align: center;
+          font-style: italic; }
+  .note b { color: var(--muted); font-style: normal; }
+
+  /* ============================================================
+     design_day.html — the DAY ("Tonight") view's own page-specific
+     block (ported verbatim, per PORT_SPEC.md §6).
+     ============================================================ */
+  .lab {
+    --elev-rest:  0 1px 0 var(--sheen) inset, 0 14px 28px -18px rgba(0,0,0,0.9);
+    --elev-hover: 0 1px 0 rgba(237,230,218,0.07) inset, 0 22px 40px -20px rgba(0,0,0,0.95);
+    --elev-press: 0 1px 0 rgba(237,230,218,0.04) inset, 0 8px 18px -14px rgba(0,0,0,0.9);
+    --elev-glow-rest:  0 1px 0 var(--sheen-c) inset, 0 0 22px -6px var(--gold-glow), 0 14px 28px -18px rgba(0,0,0,0.9);
+    --elev-glow-hover: 0 1px 0 var(--sheen-c) inset, 0 0 30px -6px var(--gold-glow), 0 22px 40px -20px rgba(0,0,0,0.95);
+    --elev-glow-press: 0 1px 0 var(--sheen-c) inset, 0 0 18px -6px var(--gold-glow), 0 8px 18px -14px rgba(0,0,0,0.9);
+    --elev-pop: 0 16px 30px -12px rgba(0,0,0,0.9);
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='64' height='64' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+  .ta-card.confident:hover { box-shadow: var(--elev-glow-hover); }
+  .ta-card.confident:active { box-shadow: var(--elev-glow-press); }
+
+  .day-wrap { max-width: 720px; margin: 0 auto; padding: 0 20px 80px; }
+
+  /* ---- quiet header: wordmark + a plain dateline, no controls ---- */
+  .day-head { padding: 40px 0 30px; }
+  .day-mark { font-family: var(--serif); font-style: italic; font-weight: 600;
+              font-size: 23px; line-height: 1.1; color: var(--text); margin: 0; }
+  .day-mark .tip { color: var(--gold); }
+  .day-when { margin: 8px 0 0; color: var(--faint); font-size: 13px;
+              letter-spacing: 0.02em; }
+  .day-when b { color: var(--muted); font-weight: 600; }
+
+  /* ---- filter knobs: distance + free + tags + source ---- */
+  .day-dist { display: flex; align-items: center; gap: 9px; margin: 14px 0 0;
+              flex-wrap: wrap; row-gap: 8px; }
+  /* the filter group wraps as ONE unit — never splits mid-group */
+  .day-filters { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+                 flex: none; }
+  .day-dist-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+              color: var(--faint); white-space: nowrap; }
+  .fb-seg { display: inline-flex; gap: 2px; background: var(--card2);
+            border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
+  .fb-seg button { font: inherit; font-family: var(--mono); font-size: 11.5px;
+            font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer;
+            background: none; border: none; border-radius: 8px; padding: 4px 8px;
+            transition: color .18s, background .3s var(--ease),
+                        transform .12s var(--ease); }
+  .fb-seg button i { font-style: normal; }
+  .fb-seg button:hover { color: var(--text); }
+  .fb-seg button:active { transform: scale(0.96); }
+  .fb-seg button[aria-current="true"] { background: var(--gold); color: var(--bg); }
+  .fb-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* free toggle — a STAMP: press-and-rotate */
+  .fb-stamp { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; flex: none;
+              transition: transform .12s var(--ease), color .15s, border-color .15s; }
+  .fb-stamp:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-stamp:active { transform: scale(0.94) rotate(-2deg); }
+  .fb-stamp:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-stamp[aria-pressed="true"] { color: var(--gold); border-color: var(--gold);
+              transform: rotate(-3deg); }
+
+  /* chip popovers (tags, source) — triggers are FLAT */
+  .fb-pop { position: relative; flex: none; }
+  .fb-pop-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; white-space: nowrap;
+              transition: color .15s, border-color .15s, transform .12s var(--ease); }
+  .fb-pop-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-pop-btn:active { transform: scale(0.96); }
+  .fb-pop-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-pop-btn.active { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+              min-width: 200px; max-width: 260px;
+              background-color: var(--card2); background-image: var(--grain);
+              border: 1px solid var(--line2); border-radius: 16px; padding: 10px;
+              box-shadow: var(--elev-pop);
+              display: none; flex-wrap: wrap; gap: 6px; }
+  .fb-panel.open { display: flex; }
+  .fb-chip { font-size: 11px; color: var(--muted); background: var(--card);
+             border: 1px solid var(--line2); border-radius: 99px; padding: 4px 10px;
+             cursor: pointer; transition: color .15s, border-color .15s,
+             transform .12s var(--ease); }
+  .fb-chip:hover { color: var(--text); }
+  .fb-chip:active { transform: scale(0.96); }
+  .fb-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-chip .n { color: var(--faint); margin-left: 4px; }
+  .fb-chip.on { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-chip.on .n { color: var(--gold-dim); }
+
+  @media (max-width: 480px) {
+    .fb-stamp, .fb-pop-btn { padding: 5px 7px; letter-spacing: 0.08em; }
+    .day-filters { gap: 5px; }
+  }
+
+  /* ---- hero: the one place the system is allowed to be loud ---- */
+  .hero-kicker { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; }
+  .hero-kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold);
+              box-shadow: 0 0 0 0 var(--gold-glow); animation: dot-pulse 2.4s ease-out infinite; }
+  .hero-kicker span.lbl { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+              color: var(--gold-dim); font-weight: 700; }
+  @keyframes dot-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(208,160,74,0.45); }
+    70%  { box-shadow: 0 0 0 9px rgba(208,160,74,0); }
+    100% { box-shadow: 0 0 0 0 rgba(208,160,74,0); }
+  }
+
+  .hero-card { padding: 26px 26px 22px; margin-bottom: 40px; }
+  .hero-card .ta-top { gap: 20px; }
+  .hero-card .ta-title { font-size: 28px; line-height: 1.06; }
+  .hero-card .coupe { width: 56px; height: 56px; }
+  .hero-card .coupe .glass { width: 47px; border-radius: 0 0 56px 56px; }
+  .hero-card .coupe .stem { height: 11px; }
+  .hero-card .coupe .foot { width: 25px; }
+  .hero-card .ta-meta { font-size: 13px; margin-top: 10px; }
+  .hero-card .ta-why { font-size: 18px; line-height: 1.48; max-width: 46ch; margin: 16px 0 4px; }
+  .hero-card .ta-foot { margin-top: 20px; }
+  .hero-card .ta-stamp-row { margin-top: 16px; padding-top: 14px; }
+
+  .stack { display: grid; gap: 18px; }
+  .stack > .ta-card { min-width: 0; max-width: 100%; }
+
+  /* ---- disclosures: both "also pouring" and "less sure" are collapsed
+         on load and expand on click (details/summary, wry summary line) ---- */
+  .more { margin-top: 16px; }
+  .more[open] > summary { margin-bottom: 8px; }
+  .more .stack { padding-top: 2px; }
+  .more summary { color: var(--faint); font-size: 14px; cursor: pointer;
+              list-style: none; padding: 6px 0; }
+  .more summary::-webkit-details-marker { display: none; }
+  .more summary:hover { color: var(--muted); }
+
+  @keyframes fb-enter { from { opacity: 0; } to { opacity: 1; } }
+  .ta-card.enter { animation: fb-enter .15s var(--ease); }
+
+  /* empty state, in case a day pours nothing */
+  .fb-empty { text-align: center; padding: 64px 0; color: var(--muted);
+              font-size: 13.5px; border-radius: 16px; }
+  .fb-empty .coupe { width: 40px; height: 40px; margin: 0 auto 18px; }
+  .fb-empty small { display: block; margin-top: 6px; color: var(--faint); }
+
+  @media (max-width: 480px) {
+    .hero-card { padding: 20px 18px 18px; }
+    .hero-card .ta-title { font-size: 24px; }
+    .hero-card .coupe { width: 48px; height: 48px; }
+    .hero-card .ta-why { font-size: 16.5px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
   <header>
     <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
     <nav>
@@ -67,10 +216,340 @@
     </nav>
   </header>
 
-  {% include "_filterbar.html" %}
+  <div class="lab" data-pal="brass">
+    <div class="day-wrap">
+      <div class="day-head">
+        <p class="day-when" id="dayWhen">tonight &middot; &hellip;</p>
+        <div class="day-dist">
+          <span class="day-dist-lbl">within</span>
+          <div class="fb-seg" id="distSeg" role="group" aria-label="distance cap">
+            <button type="button" data-mi="" aria-current="true">any</button>
+            <button type="button" data-mi="1">1<i>mi</i></button>
+            <button type="button" data-mi="2">2<i>mi</i></button>
+            <button type="button" data-mi="3">3<i>mi</i></button>
+            <button type="button" data-mi="5">5<i>mi</i></button>
+          </div>
+          <div class="day-filters">
+            <button type="button" class="fb-stamp" id="freeToggle" aria-pressed="false">free</button>
+            <div class="fb-pop">
+              <button type="button" class="fb-pop-btn" id="tagsBtn" aria-expanded="false">tags</button>
+              <div class="fb-panel" id="tagsPanel"></div>
+            </div>
+            <div class="fb-pop">
+              <button type="button" class="fb-pop-btn" id="sourceBtn" aria-expanded="false">source</button>
+              <div class="fb-panel" id="sourcePanel"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-  <div id="page-main">{% include "_main_home.html" %}</div>
-</div>
-{% include "_feedback.html" %}
+      <div id="dayRoot"></div>
+    </div>
+  </div>
+
+<script id="events-data" type="application/json">{{ events_json | safe }}</script>
+<script>
+(function () {
+  // home: settings.home_lat/home_lon (lat 37.770518, lon -122.4451024)
+  const EVENTS = JSON.parse(document.getElementById("events-data").textContent);
+  const THRESH = 65; // the booze threshold gate, fixed for this draft (no slider on Tonight)
+
+  // Tonight's filters narrow the pool the ranking runs over — none is a score.
+  // distance cap (null = no cap), free-only, tag set, source set.
+  const state = { maxMi: null, free: false, tags: new Set(), sources: new Set() };
+
+  // ---- shared cross-page filter persistence (localStorage "slosh.filters") ----
+  // JSON object, merge-patch only: Tonight never writes the thresh key, so
+  // whatever week/calendar/map stored there survives untouched.
+  function loadF(){ try { return JSON.parse(localStorage.getItem("slosh.filters")) || {}; } catch(_) { return {}; } }
+  function saveF(patch){ try { localStorage.setItem("slosh.filters", JSON.stringify(Object.assign(loadF(), patch))); } catch(_) {} }
+
+  // hard filters, combined. Null distance always PASSES (unknown location is
+  // never dropped) and untagged events are never dropped by the tag filter —
+  // both matching the weekly view / app behavior. is_free is a 3-state
+  // 0/1/null field: only 1 counts as free. Every event has a source.
+  function passesFilters(e) {
+    if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi !== undefined && e.distance_mi > state.maxMi) return false;
+    if (state.free && e.is_free !== 1) return false;
+    if (state.tags.size && (e.tags || []).length && !(e.tags || []).some(t => state.tags.has(t))) return false;
+    if (state.sources.size && !state.sources.has(e.source)) return false;
+    return true;
+  }
+
+  // ---- helpers (ported from design_real.html's real-data build) ----
+  function cleanVenue(name) {
+    if (!name) return "";
+    const idx = name.indexOf(",");
+    return (idx === -1 ? name : name.slice(0, idx)).trim();
+  }
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+  function fmtDow(iso) {
+    return new Date(iso).toLocaleDateString("en-US", { weekday: "long", timeZone: "America/Los_Angeles" });
+  }
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    const mon = d.toLocaleDateString("en-US", { month: "short", timeZone: "America/Los_Angeles" }).toUpperCase();
+    const day = d.toLocaleDateString("en-US", { day: "numeric", timeZone: "America/Los_Angeles" });
+    return mon + " " + day;
+  }
+  // wry-bartender read of the booze score — six bands, no gaps, 0..100
+  function boozeRead(n) {
+    if (n >= 90) return "basically an open bar";
+    if (n >= 75) return "probably";
+    if (n >= 60) return "good odds";
+    if (n >= 40) return "coin flip";
+    if (n >= 20) return "bring your own";
+    return "bone dry";
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function metaShortOf(e) {
+    const venue = cleanVenue(e.venue_name);
+    const read = boozeRead(e.booze);
+    return [fmtTime(e.starts_at), `<span class="ta-read">${read}</span>`, (e.neighborhood ? escapeHtml(e.neighborhood) : (venue ? escapeHtml(venue) : null))]
+      .filter(Boolean).join(" &middot; ");
+  }
+  function metaFullOf(e) {
+    const venue = cleanVenue(e.venue_name);
+    return [
+      fmtTime(e.starts_at),
+      // backend gives is_free as 0/1/null (not a JS boolean) — only 1 means free;
+      // 0 (paid) and null (unknown) both render nothing here.
+      e.is_free === 1 ? '<span class="free">free</span>' : null,
+      (venue || e.neighborhood)
+        ? escapeHtml([venue, e.neighborhood ? `(${e.neighborhood})` : null].filter(Boolean).join(" "))
+        : null,
+      e.host_name ? "by " + escapeHtml(e.host_name) : null,
+      e.rsvp_type ? `<span class="rsvp" style="color:var(--gold-dim)">${escapeHtml(e.rsvp_type)}</span>` : null,
+      e.distance_mi !== null ? e.distance_mi.toFixed(1) + " mi" : null,
+    ].filter(Boolean).join(" &middot; ");
+  }
+
+  // standard coaster card — same markup/classes as the weekly view's .ta-card
+  function cardHtml(e) {
+    const confident = e.booze >= THRESH;
+    const tierClass = confident ? "confident" : (e.booze < 25 ? "maybe low" : "maybe");
+    const dim = confident ? "" : "dim";
+    const read = boozeRead(e.booze);
+    const blurb = escapeHtml(e.blurb || "");
+    const rationale = escapeHtml(e.rationale || "");
+    const tags = (e.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join("");
+    return `<article class="ta-card ${tierClass} enter" data-id="${escapeHtml(e.id)}">
+      <div class="ta-top">
+        <span class="ta-title"><a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">${escapeHtml(e.title)}</a></span>
+        <span class="coupe ${dim}" style="--p:${e.booze}" title="${read} (${e.booze}%)">
+          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+        </span>
+      </div>
+      <div class="ta-meta">${metaShortOf(e)}</div>
+      <p class="ta-why" title="${blurb}">${blurb}</p>
+      <div class="ta-more"><div class="ta-more-inner">
+        <div class="ta-meta-full">${metaFullOf(e)}</div>
+        <div class="ta-pour"><span class="q">why the pour</span>${rationale}</div>
+      </div></div>
+      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(e.gcal)}">+ calendar</button></div>
+      <div class="ta-stamp-row"><span class="q">any booze?</span>
+        <button class="ta-stamp" data-stamp>yep</button>
+        <button class="ta-stamp miss" data-stamp="miss">nope</button></div>
+    </article>`;
+  }
+
+  // hero card — same anatomy, sized up, blurb doing the "voice" moment
+  function heroHtml(e) {
+    const read = boozeRead(e.booze);
+    const blurb = escapeHtml(e.blurb || "");
+    const rationale = escapeHtml(e.rationale || "");
+    const tags = (e.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join("");
+    return `<div class="hero-kicker"><span class="dot"></span><span class="lbl">tonight&rsquo;s pour</span></div>
+    <article class="ta-card confident enter hero-card" data-id="${escapeHtml(e.id)}">
+      <div class="ta-top">
+        <span class="ta-title"><a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">${escapeHtml(e.title)}</a></span>
+        <span class="coupe" style="--p:${e.booze}" title="${read} (${e.booze}%)">
+          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+        </span>
+      </div>
+      <div class="ta-meta">${metaFullOf(e)}</div>
+      <p class="ta-why">${blurb}</p>
+      <div class="ta-more"><div class="ta-more-inner">
+        <div class="ta-pour"><span class="q">why the pour</span>${rationale}</div>
+      </div></div>
+      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(e.gcal)}">+ calendar</button></div>
+      <div class="ta-stamp-row"><span class="q">any booze?</span>
+        <button class="ta-stamp" data-stamp>yep</button>
+        <button class="ta-stamp miss" data-stamp="miss">nope</button></div>
+    </article>`;
+  }
+
+  function render() {
+    const root = document.getElementById("dayRoot");
+    const when = document.getElementById("dayWhen");
+
+    // filter first, THEN rank — so a tightened filter can change the hero.
+    const pool = EVENTS.filter(passesFilters);
+
+    if (!pool.length) {
+      // preserve the dateline if we know it; the count is now zero.
+      const anchor = EVENTS[0];
+      when.innerHTML = anchor
+        ? `${fmtDow(anchor.starts_at)}, <b>${fmtDate(anchor.starts_at)}</b> &middot; 0 on tap`
+        : "tonight";
+      root.innerHTML = `<div class="fb-empty">
+        <div class="coupe dim" style="--p:0">
+          <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
+        </div>
+        nothing worth pouring within that radius tonight
+        <small>widen the radius, or check back tomorrow.</small>
+      </div>`;
+      return;
+    }
+
+    const sorted = [...pool].sort((a, b) => b.booze - a.booze);
+    const hero = sorted[0];
+    const rest = sorted.slice(1);
+    const shown = rest.filter(e => e.booze >= THRESH);
+    const low = rest.filter(e => e.booze < THRESH);
+
+    when.innerHTML = `${fmtDow(hero.starts_at)}, <b>${fmtDate(hero.starts_at)}</b> &middot; ${pool.length} on tap`;
+
+    let html = heroHtml(hero);
+
+    if (shown.length) {
+      html += `<details class="more also"><summary>${shown.length} also pouring tonight</summary><div class="stack">${shown.map(cardHtml).join("")}</div></details>`;
+    }
+
+    if (low.length) {
+      html += `<details class="more"><summary>${low.length} more, less sure</summary><div class="stack">${low.map(cardHtml).join("")}</div></details>`;
+    }
+
+    root.innerHTML = html;
+    bindStamps();
+    requestAnimationFrame(() => {
+      root.querySelectorAll(".ta-card.enter").forEach(c => setTimeout(() => c.classList.remove("enter"), 160));
+    });
+  }
+
+  function bindStamps() {
+    document.querySelectorAll("[data-stamp]").forEach(b => b.addEventListener("click", () => {
+      const card = b.closest(".ta-card");
+      const id = card ? card.dataset.id : null;
+      const verdict = b.dataset.stamp === "miss" ? "not_as_promised" : "as_promised";
+      const on = b.classList.toggle("stamped");
+      if (on) b.parentElement.querySelectorAll("[data-stamp]").forEach(s => { if (s !== b) s.classList.remove("stamped"); });
+      // optimistic UI: the stamp toggles immediately above, independent of the request
+      if (id) fetch(`/feedback/${id}/${verdict}`, { method: "POST" });
+    }));
+  }
+
+  // progressive disclosure: tap the card body to expand (delegated, survives re-renders).
+  // "+ hold" opens the event's real gcal link in a new tab instead.
+  document.getElementById("dayRoot").addEventListener("click", (ev) => {
+    const holdBtn = ev.target.closest(".ta-hold");
+    if (holdBtn) { window.open(holdBtn.dataset.gcal, "_blank"); return; }
+    if (ev.target.closest("a, button")) return;   // title link, stamps
+    const card = ev.target.closest(".ta-card");
+    if (card) card.classList.toggle("open");
+  });
+
+  // ---- chip popovers (tags + source share one pattern) ----
+  const popovers = [];
+
+  function makeChipPopover(btnId, panelId, labelBase, counts, stateSet, persist) {
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+    const keys = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
+    panel.innerHTML = keys.map(k =>
+      `<button type="button" class="fb-chip${stateSet.has(k) ? " on" : ""}" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
+    ).join("");
+    panel.querySelectorAll(".fb-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const k = chip.dataset.key;
+        if (stateSet.has(k)) stateSet.delete(k); else stateSet.add(k);
+        chip.classList.toggle("on", stateSet.has(k));
+        updateBtn();
+        persist();
+        render();
+      });
+    });
+    function updateBtn() {
+      if (stateSet.size) {
+        btn.textContent = labelBase + " · " + stateSet.size;
+        btn.classList.add("active");
+      } else {
+        btn.textContent = labelBase;
+        btn.classList.remove("active");
+      }
+    }
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const open = !panel.classList.contains("open");
+      popovers.forEach(p => { p.panel.classList.remove("open"); p.btn.setAttribute("aria-expanded", "false"); });
+      panel.classList.toggle("open", open);
+      btn.setAttribute("aria-expanded", String(open));
+    });
+    updateBtn();   // reflect any restored selection in the trigger label
+    popovers.push({ btn, panel });
+  }
+
+  document.addEventListener("click", (ev) => {
+    popovers.forEach(p => {
+      if (!p.panel.contains(ev.target) && ev.target !== p.btn) {
+        p.panel.classList.remove("open");
+        p.btn.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+
+  const tagCounts = new Map();
+  EVENTS.forEach(e => (e.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+  const sourceCounts = new Map();
+  EVENTS.forEach(e => sourceCounts.set(e.source, (sourceCounts.get(e.source) || 0) + 1));
+
+  // ---- distance stepper — sets the cap and re-pours ----
+  const distSeg = document.getElementById("distSeg");
+  function syncDistSeg() {
+    distSeg.querySelectorAll("button").forEach(b => {
+      const mi = b.dataset.mi === "" ? null : parseFloat(b.dataset.mi);
+      if (mi === state.maxMi) b.setAttribute("aria-current", "true");
+      else b.removeAttribute("aria-current");
+    });
+  }
+  distSeg.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const mi = btn.dataset.mi;
+      state.maxMi = mi === "" ? null : parseFloat(mi);
+      syncDistSeg();
+      saveF({ maxMi: state.maxMi });
+      render();
+    });
+  });
+
+  // ---- free toggle ----
+  const freeToggle = document.getElementById("freeToggle");
+  freeToggle.addEventListener("click", () => {
+    state.free = !state.free;
+    freeToggle.setAttribute("aria-pressed", String(state.free));
+    saveF({ free: state.free });
+    render();
+  });
+
+  // ---- INIT: restore persisted filters, sync controls, then render ----
+  const f = loadF();
+  if (f.maxMi !== undefined) state.maxMi = f.maxMi;   // null (any) or a number
+  state.free = !!f.free;
+  state.tags = new Set(f.tags || []);
+  state.sources = new Set(f.sources || []);
+
+  syncDistSeg();
+  freeToggle.setAttribute("aria-pressed", String(state.free));
+  makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags, () => saveF({ tags: [...state.tags] }));
+  makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources, () => saveF({ sources: [...state.sources] }));
+
+  render();
+})();
+</script>
 </body>
 </html>

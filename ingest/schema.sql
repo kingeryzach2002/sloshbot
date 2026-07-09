@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS scores (
   score     REAL NOT NULL,
   rationale TEXT NOT NULL,
   scored_at TEXT NOT NULL,
+  blurb     TEXT,                              -- AI one-line event standfirst (booze scorer fills it); NULL until backfilled
   PRIMARY KEY (event_id, scorer)
 );
 

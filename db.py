@@ -34,9 +34,20 @@ def get_conn() -> sqlite3.Connection:
 LEGACY_USER_ID = "legacy"
 
 
+def ensure_blurb_column(conn: sqlite3.Connection) -> None:
+    """Idempotent migration: add scores.blurb to DBs created before it existed.
+    Fresh DBs already have it (see ingest/schema.sql). Called from init_db (so
+    both the app and the scoring run get it) and standalone from the blurb
+    backfill script, which never runs the full init."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(scores)")}
+    if "blurb" not in cols:
+        conn.execute("ALTER TABLE scores ADD COLUMN blurb TEXT")
+
+
 def init_db() -> None:
     with get_conn() as conn:
         conn.executescript(SCHEMA_PATH.read_text())
+        ensure_blurb_column(conn)
         # additive migrations for DBs created before a column existed
         existing = {r["name"] for r in conn.execute("PRAGMA table_info(events)")}
         # duplicate_of: NULL = canonical/unique; else the id of the canonical

@@ -50,12 +50,13 @@ def main():
             result = module.score(e)
             with get_conn() as conn:
                 conn.execute(
-                    """INSERT INTO scores (event_id, scorer, score, rationale, scored_at)
-                       VALUES (?,?,?,?,?)
+                    """INSERT INTO scores (event_id, scorer, score, rationale, blurb, scored_at)
+                       VALUES (?,?,?,?,?,?)
                        ON CONFLICT(event_id, scorer) DO UPDATE SET
                          score=excluded.score, rationale=excluded.rationale,
-                         scored_at=excluded.scored_at""",
+                         blurb=excluded.blurb, scored_at=excluded.scored_at""",
                     (e["id"], name, result["score"], result["rationale"],
+                     result.get("blurb"),
                      datetime.now().isoformat(timespec="seconds")))
             total += 1
             print(f"  {result['score']:.2f}  {e['title'][:60]!r}  — {result['rationale'][:90]}")
