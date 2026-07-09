@@ -148,7 +148,8 @@ def _proto_event(e: dict) -> dict:
     out = dict(e)
     out["booze"] = round((e.get("scores") or {}).get("booze", 0) * 100)
     out["rationale"] = (e.get("rationales") or {}).get("booze", "")
-    out["blurb"] = _blurb(e.get("description"))
+    # Prefer the stored AI blurb; fall back to mechanical truncation when absent.
+    out["blurb"] = e.get("blurb") or _blurb(e.get("description"))
     return out
 
 
@@ -363,7 +364,7 @@ def map_view(request: Request, f: str | None = None, tags: str | None = None,
             "lat": e["lat"], "lon": e["lon"],
             "distance_mi": e["distance_mi"],
             "booze": round((e["scores"] or {}).get("booze", 0) * 100),
-            "blurb": _blurb(e["description"]),
+            "blurb": e.get("blurb") or _blurb(e["description"]),
             "tags": e["tags"],
             "source": e["source"],
             "url": e.get("url", ""),

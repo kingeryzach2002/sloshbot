@@ -48,6 +48,7 @@ class Event(BaseModel):
     # --- attached by the data layer (joins) ---
     scores: dict[str, float] = {}          # scorer -> 0..1
     rationales: dict[str, str] = {}        # scorer -> human "why"
+    blurb: Optional[str] = None            # AI one-line standfirst (booze scorer); None until backfilled
     tags: list[str] = []
     feedback: set[str] = set()             # verdicts present for this event
     host_rep: Optional[dict[str, int]] = None   # {"ok": n, "miss": n} or None

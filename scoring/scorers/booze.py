@@ -11,6 +11,18 @@ import re
 
 MODEL = "claude-haiku-4-5-20251001"
 
+# Shared spec for the italic serif standfirst line on cards. Kept in ONE place
+# so the in-scoring call (_llm) and the standalone backfill call (generate_blurb)
+# ask for exactly the same thing.
+BLURB_INSTRUCTION = """Also write a "blurb": one clean, concrete sentence describing WHAT THE EVENT IS and its texture/vibe. Rules:
+- Present tense. Max ~120 characters. One sentence.
+- Say what actually happens and how it feels — prefer specific nouns over hype.
+- Do NOT mention free drinks, booze, an open bar, or any probability/odds (a separate line handles that).
+- Do NOT mention ticket price, and no "RSVP" / "Join us" / marketing boilerplate.
+- No trailing ellipsis.
+- If the description is empty or useless, infer a plain blurb from the title, venue, and neighborhood.
+It should read like a knowing one-line event description."""
+
 # (pattern, score-if-matched, label). First strong match anchors the heuristic.
 # "Alcohol is present" and "alcohol is free" are different claims — a bar venue
 # or a happy-hour promo is evidence of the former, not the latter, so those no
@@ -65,21 +77,60 @@ Venue: {event.get('venue_name')} ({event.get('neighborhood') or 'unknown neighbo
 Ticket: {'free' if event.get('is_free') else f"${event.get('price_min')}-${event.get('price_max')}" if event.get('price_min') is not None else 'unknown'}
 Description: {(event.get('description') or '')[:2500]}
 
-Reply with ONLY a JSON object: {{"score": <float>, "rationale": "<one sentence, cite the specific evidence>"}}"""
+{BLURB_INSTRUCTION}
+
+Reply with ONLY a JSON object: {{"score": <float>, "rationale": "<one sentence, cite the specific evidence>", "blurb": "<the one-sentence event blurb>"}}"""
 
     try:
         client = anthropic.Anthropic()
         resp = client.messages.create(
-            model=MODEL, max_tokens=200,
+            model=MODEL, max_tokens=320,
             messages=[{"role": "user", "content": prompt}],
         )
         text = resp.content[0].text.strip()
         text = re.sub(r"^```(json)?|```$", "", text, flags=re.M).strip()
         data = json.loads(text)
         s = float(data["score"])
-        return {"score": max(0.0, min(1.0, s)), "rationale": str(data["rationale"])}
+        blurb = data.get("blurb")
+        return {"score": max(0.0, min(1.0, s)), "rationale": str(data["rationale"]),
+                "blurb": str(blurb).strip() if blurb else None}
     except Exception as e:
         print(f"  booze LLM failed for {event['id']}: {e} — using heuristic")
+        return None
+
+
+def generate_blurb(event: dict) -> str | None:
+    """Standalone Haiku call that returns JUST the card blurb (or None on any
+    failure / no API key). Used by the blurb backfill so it never re-scores an
+    event — the in-pipeline path gets its blurb from _llm above for free."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return None
+    import anthropic
+
+    prompt = f"""Write a one-line blurb for this San Francisco event, for the italic standfirst line on an event card.
+
+{BLURB_INSTRUCTION}
+
+EVENT
+Title: {event.get('title')}
+Host: {event.get('host_name')}
+Venue: {event.get('venue_name')} ({event.get('neighborhood') or 'unknown neighborhood'})
+Description: {(event.get('description') or '')[:2500]}
+
+Reply with ONLY a JSON object: {{"blurb": "<the one-sentence event blurb>"}}"""
+
+    try:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=MODEL, max_tokens=320,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = resp.content[0].text.strip()
+        text = re.sub(r"^```(json)?|```$", "", text, flags=re.M).strip()
+        blurb = json.loads(text).get("blurb")
+        return str(blurb).strip() if blurb else None
+    except Exception as e:
+        print(f"  blurb generation failed for {event.get('id')}: {e}")
         return None
 
 
@@ -101,7 +152,9 @@ def _host_reputation(host_name: str | None) -> tuple[float, int, int] | None:
 
 
 def score(event: dict) -> dict:
-    result = _llm(event) or _heuristic(event)
+    # Heuristic fallback has no blurb; the LLM path carries one (may be None).
+    result = _llm(event) or {**_heuristic(event), "blurb": None}
+    blurb = result.get("blurb")
     rep = _host_reputation(event.get("host_name"))
     if rep:
         ratio, ok, total = rep
@@ -112,5 +165,6 @@ def score(event: dict) -> dict:
             "rationale": (f"{result['rationale']} [host record: {ok}/{total} "
                           f"delivered drinks as promised → adjusted "
                           f"{result['score']:.2f}→{blended:.2f}]"),
+            "blurb": blurb,  # host-reputation blend adjusts the score, not the blurb
         }
     return result
