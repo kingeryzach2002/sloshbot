@@ -16,13 +16,27 @@
   /* ---- site header/nav parity (kept from the pre-port map.html; _tokens.html
      is variables-only and doesn't style these, so a little chrome lives here) ---- */
   body { margin: 0; }
-  .site-header { padding: 14px 20px 0; position: relative; z-index: 1150; }
+  /* map keeps its own .site-header class (it's a full-bleed Leaflet page, not
+     the shared scrolling chrome), but the TABS must read identically to the
+     shared header: quiet muted labels, active one lit brass with a 2px
+     underslung brass bar. Mirrors _components.html's header nav treatment. */
+  .site-header { position: relative; z-index: 1150; box-sizing: border-box;
+        min-height: var(--hdr-h, 52px); padding: 0 20px;
+        display: flex; align-items: center; justify-content: space-between; gap: 24px;
+        background: var(--bg); border-bottom: 1px solid var(--line); }
   .site-header h1.wordmark { font-family: var(--serif); font-style: italic; font-weight: 600;
-        font-size: 20px; margin: 0 0 8px; color: var(--text); }
+        font-size: 23px; line-height: 1; margin: 0; color: var(--text); }
   .site-header h1.wordmark .tip { color: var(--gold); }
-  .site-header nav { display: flex; gap: 14px; margin: 0 0 10px; }
-  .site-header nav a { color: var(--muted); text-decoration: none; font-size: 13px; }
-  .site-header nav a.active, .site-header nav a:hover { color: var(--gold); }
+  .site-header nav { display: flex; align-items: center; gap: 22px; }
+  .site-header nav a { position: relative; color: var(--muted); text-decoration: none;
+        font-family: var(--sans); font-size: 13.5px; letter-spacing: 0.05em;
+        padding-bottom: 4px; transition: color .18s var(--ease); }
+  .site-header nav a::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+        height: 2px; background: var(--gold); border-radius: 2px;
+        transform: scaleX(0); transform-origin: center; transition: transform .25s var(--ease); }
+  .site-header nav a:hover { color: var(--gold); }
+  .site-header nav a.active { color: var(--gold); }
+  .site-header nav a.active::after { transform: scaleX(1); }
   .homebar { display: flex; align-items: center; gap: 12px; padding: 0 20px 10px;
              flex-wrap: wrap; position: relative; z-index: 1150; }
   .homebar form { display: flex; gap: 6px; }
@@ -52,10 +66,49 @@
   .mb { flex: none; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
         row-gap: 8px; padding: 12px 20px; background: rgba(15,9,8,0.92);
         border-bottom: 1px solid var(--line2); position: relative; z-index: 1200; }
-  .mb-filters { display: flex; align-items: center; gap: 10px; margin-left: auto;
+  .mb-filters { display: flex; align-items: center; gap: 10px;
                 flex-wrap: wrap; row-gap: 8px; }
   .mb-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
             color: var(--faint); white-space: nowrap; }
+
+  /* ---- chance-of-booze slider (leading control) — copied verbatim from
+     week.html's .thresh rules so it reads identically to Week/Calendar.
+     The gold coupe-liquid disc thumb; --p tracks the current value. ---- */
+  .mb-ctl { display: flex; align-items: center; gap: 8px; }
+  .thresh { flex: 1 1 200px; min-width: 160px; max-width: 300px; }
+  .thresh-range { --p: 65; -webkit-appearance: none; appearance: none; flex: 1;
+                  height: 24px; margin: 0; min-width: 0; background: transparent;
+                  cursor: pointer; }
+  .thresh-range::-webkit-slider-runnable-track { height: 2px; border-radius: 99px;
+                  background: linear-gradient(to right,
+                    var(--gold) calc(var(--p) * 1%), var(--line2) calc(var(--p) * 1%)); }
+  .thresh-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+                  width: 18px; height: 18px; margin-top: -8px; border-radius: 50%;
+                  border: none;
+                  background: radial-gradient(circle closest-side,
+                    var(--gold) calc(var(--p) * 1%),
+                    transparent calc(var(--p) * 1% + 2%));
+                  box-shadow: 0 2px 7px -1px rgba(0,0,0,0.85); }
+  .thresh-range::-moz-range-track { height: 2px; border-radius: 99px; background: var(--line2); }
+  .thresh-range::-moz-range-progress { height: 2px; border-radius: 99px; background: var(--gold); }
+  .thresh-range::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%;
+                  border: none; box-sizing: border-box;
+                  background: radial-gradient(circle closest-side,
+                    var(--gold) calc(var(--p) * 1%),
+                    transparent calc(var(--p) * 1% + 2%));
+                  box-shadow: 0 2px 7px -1px rgba(0,0,0,0.85); }
+  .thresh-range:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px;
+                  border-radius: 4px; }
+  .thresh-read { font-variant-numeric: tabular-nums; color: var(--gold); font-size: 13px;
+                 font-weight: 600; width: 34px; text-align: right; flex: none; }
+
+  /* home-address setter tucked to the far right of the filter bar (quiet;
+     it's a setting, not a filter) */
+  .mb-home { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .mb-home input[type=text] { background: var(--card2); border: 1px solid var(--line2);
+        color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: 12.5px; width: 180px; }
+  .mb-home .set-btn { font-size: 11px; font-weight: 650; color: var(--bg); background: var(--gold);
+        border: none; border-radius: 8px; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
   .mb-seg { display: inline-flex; gap: 2px; background: var(--card2);
             border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
   .mb-seg button { font: inherit; font-family: var(--mono); font-size: 11.5px;
@@ -228,19 +281,6 @@
   </nav>
 </header>
 
-{% if not has_home or n_unmapped %}
-<div class="homebar">
-  {% if not has_home %}
-  <form method="post" action="/settings/home">
-    <input type="text" name="home_address" placeholder="home address (for distances)" value="{{ home_address }}">
-    <button class="set-btn" type="submit">{{ 'Update home' if home_address else 'Set home' }}</button>
-  </form>
-  {% endif %}
-  {% if n_unmapped %}<span class="note">{{ n_unmapped }} event(s) have no location and aren't shown —
-    run <code>uv run python -m ingest.geocode</code> to backfill.</span>{% endif %}
-</div>
-{% endif %}
-
 <!-- ============================================================
      Ported verbatim (minus the prototype's own wordmark, which
      would duplicate the site header above) from design_map_live.html's
@@ -248,6 +288,13 @@
      source), the Leaflet stage, and the unplaced-events bar.
      ============================================================ -->
 <div class="mb">
+  <div class="mb-ctl thresh">
+    <span class="mb-lbl">chance of booze</span>
+    <input type="range" min="0" max="100" step="1" value="65"
+           class="thresh-range" id="threshRange"
+           aria-label="minimum booze confidence percent">
+    <span class="thresh-read" id="threshRead">65%</span>
+  </div>
   <div class="mb-filters">
     <span class="mb-lbl">distance</span>
     <div class="mb-seg" id="distSeg" role="group" aria-label="distance cap">
@@ -258,6 +305,7 @@
       <button type="button" data-mi="5">5<i>mi</i></button>
     </div>
     <button type="button" class="mb-stamp" id="tonightToggle" aria-pressed="false">tonight</button>
+    <button type="button" class="mb-stamp" id="freeToggle" aria-pressed="false">free</button>
     <div class="mb-pop">
       <button type="button" class="mb-pop-btn" id="tagsBtn" aria-expanded="false">tags</button>
       <div class="mb-panel" id="tagsPanel"></div>
@@ -267,6 +315,10 @@
       <div class="mb-panel" id="sourcePanel"></div>
     </div>
   </div>
+  <form class="mb-home" method="post" action="/settings/home">
+    <input type="text" name="home_address" placeholder="home address (for distances)" value="{{ home_address }}">
+    <button class="set-btn" type="submit">{{ 'Update home' if home_address else 'Set home' }}</button>
+  </form>
 </div>
 <div class="stage-wrap">
   <div id="map"></div>
@@ -288,9 +340,27 @@
   const PINS = DATA.pins || [];
   const UNPLACED = DATA.unplaced || []; // not emitted by map_json today; guarded for forward-compat
   const MI_M = 1609.34;
-  const CONFIDENT_THRESH = 65; // matches the weekly view's default pour line
 
-  const state = { maxMi: null, tonightOnly: false, tags: new Set(), sources: new Set() };
+  // live pour line — set by the "chance of booze" slider (mirrors Week/Calendar).
+  // A pin whose booze >= state.thresh lights gold (.confident); below it stays dim.
+  // The slider never removes pins — every venue's location always shows.
+  const state = { thresh: 65, maxMi: null, tonightOnly: false, free: false, tags: new Set(), sources: new Set() };
+
+  // ---- shared cross-page filter store (week/calendar/map all read+merge-patch
+  // the ONE localStorage object "slosh.filters"). loadF returns the whole object;
+  // saveF merge-patches a single key so pages never clobber each other's fields. ----
+  function loadF() { try { return JSON.parse(localStorage.getItem("slosh.filters")) || {}; } catch (_) { return {}; } }
+  function saveF(patch) { try { localStorage.setItem("slosh.filters", JSON.stringify(Object.assign(loadF(), patch))); } catch (_) {} }
+
+  // apply restored filters into state BEFORE any pins render, so the very first
+  // pass sizes/lights AND filters correctly. DOM controls (slider, distance seg,
+  // free stamp, chips) are reflected where each is wired up, below.
+  const f = loadF();
+  if (typeof f.thresh === "number" && f.thresh >= 0 && f.thresh <= 100) state.thresh = f.thresh;
+  if (f.maxMi === null || typeof f.maxMi === "number") state.maxMi = f.maxMi;
+  if (typeof f.free === "boolean") state.free = f.free;
+  state.tags = new Set(f.tags || []);
+  state.sources = new Set(f.sources || []);
 
   function todayStr() {
     const d = new Date();
@@ -305,14 +375,38 @@
   function fmtTime(iso) {
     return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   }
-  // booze -> disc geometry (same mapping as design_map.html; no verbal read here)
+  // scraped venue_name sometimes carries a full street address after a comma;
+  // keep only the leading name (matches week.html's cleanVenue)
+  function cleanVenue(name) {
+    if (!name) return "";
+    const idx = name.indexOf(",");
+    return (idx === -1 ? name : name.slice(0, idx)).trim();
+  }
+  // booze -> disc geometry. SIZE is a FIXED function of the pin's own booze
+  // ONLY (never the slider). A power curve (exponent 1.7) shrinks low-booze dots
+  // hard; radius runs R_MIN (2.5) -> R_MAX (9), i.e. diameter 5px -> ~18px (about
+  // 30% smaller than the previous 26px max). Moving the pour line NEVER resizes a
+  // dot — the confident/dim decision (and the opacity/glow that go with being
+  // "lit") stay threshold-driven: booze >= state.thresh lights gold, below stays
+  // dim. Mirrors the Calendar "lights up, doesn't resize" behavior.
+  const R_MIN = 2.5, R_MAX = 9;
   function pinSize(booze) {
-    if (booze >= CONFIDENT_THRESH) {
-      return { r: 8 + (booze - CONFIDENT_THRESH) / 35 * 5, confident: true,
-               opacity: 0.75 + (booze - CONFIDENT_THRESH) / 35 * 0.2 };
-    }
-    return { r: 4 + booze / CONFIDENT_THRESH * 3.5, confident: false,
-             opacity: 0.35 + booze / CONFIDENT_THRESH * 0.35 };
+    const b = Math.min(Math.max(booze, 0), 100);
+    const t = b / 100;
+    const r = R_MIN + (R_MAX - R_MIN) * Math.pow(t, 1.7);   // static power curve
+    const confident = booze >= state.thresh;     // lit vs. dim: the ONLY threshold effect
+    return { r, confident, opacity: confident ? 0.9 : 0.55 };
+  }
+
+  // build a pin's DivIcon from its current booze vs. the live pour line — the
+  // single source of truth for both initial render and slider re-lighting.
+  function makePinIcon(pin) {
+    const s = pinSize(pin.booze);
+    const d = Math.round(s.r * 2);
+    const glow = s.confident ? `box-shadow:0 0 ${Math.round(6 + s.r)}px -1px var(--gold-glow);` : "";
+    const html = `<div class="pin ${s.confident ? "confident" : ""}"
+        style="width:${d}px;height:${d}px;opacity:${s.opacity.toFixed(2)};${glow}"></div>`;
+    return L.divIcon({ className: "pin-wrap", html, iconSize: [d, d], iconAnchor: [d / 2, d / 2] });
   }
 
   // ---------------------------------------------------------------
@@ -371,11 +465,8 @@
   const markers = PINS.map(pin => {
     const s = pinSize(pin.booze);
     const d = Math.round(s.r * 2);
-    const glow = s.confident ? `box-shadow:0 0 ${Math.round(6 + s.r)}px -1px var(--gold-glow);` : "";
-    const html = `<div class="pin ${s.confident ? "confident" : ""}"
-        style="width:${d}px;height:${d}px;opacity:${s.opacity.toFixed(2)};${glow}"></div>`;
     const marker = L.marker([pin.lat, pin.lon], {
-      icon: L.divIcon({ className: "pin-wrap", html, iconSize: [d, d], iconAnchor: [d / 2, d / 2] }),
+      icon: makePinIcon(pin),
       riseOnHover: true,
     });
     marker._pin = pin;
@@ -385,15 +476,19 @@
   });
 
   function popupHtml(pin) {
-    const dim = pin.booze >= CONFIDENT_THRESH ? "" : "dim";
+    const dim = pin.booze >= state.thresh ? "" : "dim";
     const tags = (pin.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join("");
     // is_free is 0/1/null from the server (not a JS boolean) — 1 is truthy
     // (shows "free"), 0 and null are both falsy (no chip), matching the
     // 3-state handling PORT_SPEC §2 calls for.
+    // lead with the neighborhood when we have one; fall back to the cleaned
+    // venue name only when neighborhood is empty (never the raw street address)
+    const place = pin.neighborhood ? escapeHtml(pin.neighborhood)
+      : (cleanVenue(pin.venue) ? escapeHtml(cleanVenue(pin.venue)) : null);
     const metaBits = [
       fmtTime(pin.starts_at),
       pin.is_free ? '<span class="free">free</span>' : null,
-      pin.venue ? escapeHtml(pin.venue) : null,
+      place,
       pin.distance_mi !== null ? pin.distance_mi.toFixed(1) + " mi" : null,
     ].filter(Boolean).join(" &middot; ");
     const title = pin.url
@@ -407,7 +502,7 @@
       </div>
       <div class="ta-meta">${metaBits}</div>
       <p class="ta-why">${escapeHtml(pin.blurb || "")}</p>
-      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(pin.gcal || "")}">+ hold</button></div>`;
+      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(pin.gcal || "")}">+ calendar</button></div>`;
   }
   // "+ hold" opens the event's Google Calendar link (popups are built dynamically by Leaflet, so delegate)
   document.addEventListener("click", (ev) => {
@@ -433,6 +528,8 @@
   function pinPasses(p) {
     if (state.maxMi !== null && p.distance_mi !== null && p.distance_mi > state.maxMi) return false;
     if (state.tonightOnly && p.starts_at.slice(0, 10) !== TODAY) return false;
+    // is_free is 0/1/null from the server — only 1 (truthy) counts as free
+    if (state.free && !p.is_free) return false;
     if (state.tags.size && (p.tags || []).length && !p.tags.some(t => state.tags.has(t))) return false;
     if (state.sources.size && !state.sources.has(p.source)) return false;
     return true;
@@ -448,13 +545,44 @@
     updateUnplaced();
   }
 
-  // ---- distance seg ----
+  // ---- chance-of-booze slider -> re-light pins (lit gold vs. dim), never hide.
+  // Mirrors Calendar's "lights up, not filters": every venue stays on the map;
+  // moving the slider only re-classes each pin against the new pour line and
+  // rebuilds its popup coupe. ~160 pins, so a plain synchronous pass is fine. --
+  function relightPins() {
+    markers.forEach(m => {
+      m.setIcon(makePinIcon(m._pin));
+      m.setTooltipContent(escapeHtml(m._pin.title));
+      m.setPopupContent(popupHtml(m._pin));
+    });
+  }
+  const threshInput = document.getElementById("threshRange");
+  const threshRead = document.getElementById("threshRead");
+  // reflect any restored (localStorage) threshold onto the control before use
+  threshInput.value = state.thresh;
+  threshInput.style.setProperty("--p", state.thresh);
+  threshRead.textContent = state.thresh + "%";
+  threshInput.addEventListener("input", () => {
+    state.thresh = parseInt(threshInput.value, 10);
+    threshInput.style.setProperty("--p", state.thresh);   // liquid-disc fill
+    threshRead.textContent = state.thresh + "%";
+    saveF({ thresh: state.thresh });
+    relightPins();
+  });
+
+  // ---- distance seg (reflect restored maxMi onto the segmented control) ----
   const distSeg = document.getElementById("distSeg");
+  distSeg.querySelectorAll("button").forEach(b => {
+    const bmi = b.dataset.mi === "" ? null : parseFloat(b.dataset.mi);
+    if (bmi === state.maxMi) b.setAttribute("aria-current", "true");
+    else b.removeAttribute("aria-current");
+  });
   distSeg.querySelectorAll("button").forEach(btn => {
     btn.addEventListener("click", () => {
       distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
       btn.setAttribute("aria-current", "true");
       state.maxMi = btn.dataset.mi === "" ? null : parseFloat(btn.dataset.mi);
+      saveF({ maxMi: state.maxMi });
       applyFilters();
     });
   });
@@ -467,15 +595,28 @@
     applyFilters();
   });
 
+  // ---- free toggle (restricts to is_free === 1; 0/null not free) ----
+  const freeToggle = document.getElementById("freeToggle");
+  freeToggle.setAttribute("aria-pressed", String(state.free));   // reflect restored state
+  freeToggle.addEventListener("click", () => {
+    state.free = !state.free;
+    freeToggle.setAttribute("aria-pressed", String(state.free));
+    saveF({ free: state.free });
+    applyFilters();
+  });
+
   // ---- tags + source chip popovers (same pattern as design_map.html) ----
   const panels = [];
-  function makeChipPopover(btnId, panelId, labelBase, counts, stateSet) {
+  function makeChipPopover(btnId, panelId, labelBase, counts, stateSet, persistKey) {
     const btn = document.getElementById(btnId);
     const panel = document.getElementById(panelId);
     const keys = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
     panel.innerHTML = keys.map(k =>
-      `<button type="button" class="mb-chip" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
+      `<button type="button" class="mb-chip${stateSet.has(k) ? " on" : ""}" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
     ).join("");
+    // reflect any restored selection onto the trigger label/active state
+    btn.textContent = stateSet.size ? labelBase + " · " + stateSet.size : labelBase;
+    btn.classList.toggle("active", stateSet.size > 0);
     panel.querySelectorAll(".mb-chip").forEach(chip => {
       chip.addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -484,6 +625,7 @@
         chip.classList.toggle("on", stateSet.has(k));
         btn.textContent = stateSet.size ? labelBase + " · " + stateSet.size : labelBase;
         btn.classList.toggle("active", stateSet.size > 0);
+        saveF({ [persistKey]: [...stateSet] });
         applyFilters();
       });
     });
@@ -504,8 +646,8 @@
   PINS.forEach(p => (p.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
   const sourceCounts = new Map();
   PINS.forEach(p => sourceCounts.set(p.source, (sourceCounts.get(p.source) || 0) + 1));
-  makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags);
-  makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources);
+  makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags, "tags");
+  makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources, "sources");
 
   // ---- unplaced row (source inferable from id prefix; reflects source filter) ----
   const unplacedBar = document.getElementById("unplacedBar");
@@ -519,9 +661,9 @@
       ).join("")}</div>`;
   }
 
-  // ---- init: rings already emphasized at rest; render unplaced row ----
-  emphasizeRing();
-  updateUnplaced();
+  // ---- init: apply restored filters to the markers already on the map
+  // (also emphasizes rings + renders the unplaced row) ----
+  applyFilters();
 
   // ---------------------------------------------------------------
   // Re-fetch path for server-side filtering (kept from the pre-port
@@ -553,11 +695,8 @@
     newPins.forEach(pin => {
       const s = pinSize(pin.booze);
       const d = Math.round(s.r * 2);
-      const glow = s.confident ? `box-shadow:0 0 ${Math.round(6 + s.r)}px -1px var(--gold-glow);` : "";
-      const html = `<div class="pin ${s.confident ? "confident" : ""}"
-          style="width:${d}px;height:${d}px;opacity:${s.opacity.toFixed(2)};${glow}"></div>`;
       const marker = L.marker([pin.lat, pin.lon], {
-        icon: L.divIcon({ className: "pin-wrap", html, iconSize: [d, d], iconAnchor: [d / 2, d / 2] }),
+        icon: makePinIcon(pin),
         riseOnHover: true,
       });
       marker._pin = pin;

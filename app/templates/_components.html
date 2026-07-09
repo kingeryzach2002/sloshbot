@@ -20,15 +20,34 @@
      ============================================================ */
   body { background: var(--bg); color: var(--text); font-family: var(--sans); margin: 0; }
 
-  header { padding: 14px 20px 0; }
+  /* ---- two-tier sticky chrome --------------------------------------
+     ROW 1 is this header: the serif-italic wordmark (left) and the four
+     quiet view TABS (right), on one baseline-aligned row. ROW 2 is each
+     view's own control bar (.fb / .cal-head-bar day headers / .day-dist),
+     which pins just beneath at top: var(--hdr-h). The tabs read like a
+     bar menu's section headers, not buttons: muted labels, the active
+     one lit brass with a 2px underslung brass bar. ------------------- */
+  :root { --hdr-h: 52px; }
+
+  header { position: sticky; top: 0; z-index: 100; box-sizing: border-box;
+        height: var(--hdr-h); padding: 0 20px;
+        display: flex; align-items: center; justify-content: space-between; gap: 24px;
+        background: var(--bg); border-bottom: 1px solid var(--line); }
   header h1.wordmark { font-family: var(--serif); font-style: italic; font-weight: 600;
-        font-size: 20px; margin: 0 0 10px; color: var(--text); }
+        font-size: 23px; line-height: 1; margin: 0; color: var(--text); }
   header h1.wordmark .tip { color: var(--gold); }
-  header nav { display: flex; gap: 14px; margin: 0 0 12px; padding-bottom: 12px;
-        border-bottom: 1px solid var(--line); }
-  header nav a { color: var(--muted); text-decoration: none; font-size: 13px;
-        transition: color .15s; }
-  header nav a.active, header nav a:hover { color: var(--gold); }
+
+  header nav { display: flex; align-items: center; gap: 22px; }
+  header nav a { position: relative; color: var(--muted); text-decoration: none;
+        font-family: var(--sans); font-size: 13.5px; letter-spacing: 0.05em;
+        padding-bottom: 4px; transition: color .18s var(--ease); }
+  header nav a::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+        height: 2px; background: var(--gold); border-radius: 2px;
+        transform: scaleX(0); transform-origin: center;
+        transition: transform .25s var(--ease); }
+  header nav a:hover { color: var(--gold); }
+  header nav a.active { color: var(--gold); }
+  header nav a.active::after { transform: scaleX(1); }
 
   /* ============================================================
      TACTILE — "The Coaster" card system (ported verbatim from

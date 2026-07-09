@@ -39,8 +39,6 @@
               font-size: 23px; line-height: 1.1; color: var(--text); margin: 0; flex: none; }
   .cal-mark .tip { color: var(--gold); }
   .cal-week-lbl { font-family: var(--sans); font-size: 13px; color: var(--muted); flex: none; }
-  .cal-cap { color: var(--faint); font-size: 12.5px; margin: 0 0 0 auto; text-align: right;
-             max-width: 34ch; flex: none; }
 
   .cal-thresh { display: flex; align-items: center; gap: 8px; flex: none; }
   .cal-thresh .fb-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
@@ -85,6 +83,18 @@
   .fb-seg button[aria-current="true"] { background: var(--gold); color: var(--bg); }
   .fb-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
+  /* free toggle — a STAMP: press-and-rotate (mirrors week.html) */
+  .fb-stamp { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; flex: none;
+              transition: transform .12s var(--ease), color .15s, border-color .15s; }
+  .fb-stamp:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-stamp:active { transform: scale(0.94) rotate(-2deg); }
+  .fb-stamp:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-stamp[aria-pressed="true"] { color: var(--gold); border-color: var(--gold);
+              transform: rotate(-3deg); }
+
   /* chip popovers (tags, source) — triggers are FLAT */
   .fb-pop { position: relative; flex: none; }
   .fb-pop-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
@@ -119,7 +129,7 @@
          border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden;
          background-color: var(--card); background-image: var(--grain); }
 
-  .cal-head { position: sticky; top: 0; z-index: 5; background-color: var(--card2);
+  .cal-head { position: sticky; top: var(--hdr-h); z-index: 5; background-color: var(--card2);
               background-image: var(--grain); border-bottom: 1px solid var(--line2);
               padding: 9px 4px 8px; text-align: center; }
   .cal-head .dow { display: block; font-family: var(--serif); font-style: normal;
@@ -129,8 +139,6 @@
                     color: var(--muted); margin-top: 1px; font-variant-numeric: oldstyle-nums; }
   .cal-head.today { background-color: rgba(208,160,74,0.07); }
   .cal-head.today .dow, .cal-head.today .num { color: var(--gold); }
-  .cal-head .cnt { display: block; font-size: 9px; color: var(--faint); margin-top: 2px;
-                   letter-spacing: 0.02em; font-variant-numeric: oldstyle-nums; }
   .cal-head .more { display: block; font-size: 9px; color: var(--faint); margin-top: 1px;
                     text-decoration: underline dotted; text-underline-offset: 2px;
                     letter-spacing: 0.02em; transition: color .15s var(--ease); }
@@ -161,8 +169,8 @@
   .evt::before { /* the fill-bar: booze% as a gold liquid column, left edge */
          content: ""; position: absolute; left: 0; bottom: 0; top: 0; width: 3px;
          background: var(--line2); }
-  .evt::after { content: ""; position: absolute; left: 0; bottom: 0; width: 3px;
-         height: calc(var(--p, 0) * 1%); background: var(--faint); opacity: 0.7; }
+  .evt::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+         height: 100%; background: var(--faint); opacity: 0.7; }
   .evt.confident { border-color: var(--gold-dim); background: #211a10; box-shadow: var(--elev-glow-rest); }
   .evt.confident::after { background: var(--gold); opacity: 0.95; }
   .evt:hover { transform: translateY(-1px); z-index: 6;
@@ -241,7 +249,6 @@
 
 </head>
 <body>
-<div class="wrap">
   <header>
     <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
     <nav>
@@ -252,8 +259,9 @@
     </nav>
   </header>
 
+<div class="wrap">
     <div class="cal-head-bar">
-      <span class="cal-week-lbl" id="calWeekLbl">this week</span>
+      <span class="cal-week-lbl" id="calWeekLbl"></span>
       <div class="cal-thresh">
         <span class="fb-lbl">chance of booze</span>
         <input type="range" min="0" max="100" step="1" value="65" class="thresh-range"
@@ -270,6 +278,7 @@
           <button type="button" data-mi="3">3<i>mi</i></button>
           <button type="button" data-mi="5">5<i>mi</i></button>
         </div>
+        <button type="button" class="fb-stamp" id="freeToggle" aria-pressed="false">free</button>
         <div class="fb-pop">
           <button type="button" class="fb-pop-btn" id="tagsBtn" aria-expanded="false">tags</button>
           <div class="fb-panel" id="tagsPanel"></div>
@@ -279,8 +288,6 @@
           <div class="fb-panel" id="sourcePanel"></div>
         </div>
       </div>
-
-      <p class="cal-cap">top 6 per day, by booze &mdash; raise the bar to see which ones light up; the rest wait at the bar.</p>
     </div>
 
     <div class="cal" id="cal">
@@ -318,7 +325,20 @@
   // confident tier: gold rim + glow + brighter surface) when its booze
   // clears the slider, else dim. The other three ARE hard filters that
   // change which events exist, so they recompute the top-6 + relayout.
-  let state = { thresh: 65, maxMi: null, tags: new Set(), sources: new Set() };
+  let state = { thresh: 65, maxMi: null, freeOnly: false, tags: new Set(), sources: new Set() };
+
+  // ---- shared cross-page filter persistence (week / calendar / map) ----
+  // Single JSON object under "slosh.filters"; helpers merge-patch so each
+  // view only writes the field it owns and never clobbers the others.
+  function loadF(){ try { return JSON.parse(localStorage.getItem("slosh.filters")) || {}; } catch(_) { return {}; } }
+  function saveF(patch){ try { localStorage.setItem("slosh.filters", JSON.stringify(Object.assign(loadF(), patch))); } catch(_) {} }
+
+  const f = loadF();
+  if (typeof f.thresh === "number" && f.thresh >= 0 && f.thresh <= 100) state.thresh = f.thresh;
+  if (f.maxMi === null || typeof f.maxMi === "number") state.maxMi = f.maxMi;
+  if (typeof f.free === "boolean") state.freeOnly = f.free;
+  state.tags = new Set(f.tags || []);
+  state.sources = new Set(f.sources || []);
 
   // hard filters, AND-composed (matches design_real.html / app/main.py):
   //  - distance: events with unknown (null) distance are never dropped;
@@ -327,6 +347,7 @@
   //  - source: plain membership (every event has exactly one source).
   function passesFilters(e) {
     if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi > state.maxMi) return false;
+    if (state.freeOnly && e.is_free !== 1) return false;
     if (state.tags.size && (e.tags || []).length && !e.tags.some(t => state.tags.has(t))) return false;
     if (state.sources.size && !state.sources.has(e.source)) return false;
     return true;
@@ -457,7 +478,7 @@
   popEl.setAttribute("role", "dialog");
   document.body.appendChild(popEl);
 
-  // "+ hold" always opens the pre-filled Google Calendar template link
+  // "+ calendar" always opens the pre-filled Google Calendar template link
   // for whichever event the popover is currently showing (openPop).
   popEl.addEventListener("click", (ev) => {
     if (ev.target.closest(".evt-pop-hold") && openPop) window.open(openPop.gcal, "_blank");
@@ -478,7 +499,7 @@
     const metaParts = [
       fmtTime(e.starts_at) + "–" + fmtTime(endIso(e)),
       e.is_free ? '<span class="free">free</span>' : null,
-      (venue || e.neighborhood) ? escapeHtml([venue, e.neighborhood ? `(${e.neighborhood})` : null].filter(Boolean).join(" ")) : null,
+      (e.neighborhood || venue) ? escapeHtml(e.neighborhood || venue) : null,
       e.host_name ? "by " + escapeHtml(e.host_name) : null,
     ].filter(Boolean);
     const tags = (e.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join("");
@@ -492,7 +513,7 @@
       <div class="evt-pop-read">${read}</div>
       <div class="evt-pop-meta">${metaParts.join(" &middot; ")}</div>
       <p class="evt-pop-blurb">${escapeHtml(e.blurb || "")}</p>
-      <div class="evt-pop-foot"><div class="evt-pop-tags">${tags}</div><button type="button" class="evt-pop-hold">+ hold</button></div>
+      <div class="evt-pop-foot"><div class="evt-pop-tags">${tags}</div><button type="button" class="evt-pop-hold">+ calendar</button></div>
     `;
     const r = chip.getBoundingClientRect();
     const popW = 280;
@@ -522,12 +543,8 @@
   window.addEventListener("resize", closePop);
   window.addEventListener("scroll", closePop, true);
 
-  // "+N more" is a no-op affordance in this draft — it will route to the
-  // weekly (list) view, which has room for the full, uncapped day.
-  document.addEventListener("click", (ev) => {
-    const more = ev.target.closest(".more");
-    if (more) ev.preventDefault();
-  });
+  // "+N more" is a real link to the weekly (list) view, which has room for
+  // the full, uncapped day — so it navigates natively, no JS handler needed.
 
   // ---- render ----
   function chipHtml(pos) {
@@ -556,7 +573,7 @@
     return new Date(dateKey + "T12:00:00").toLocaleDateString("en-US", { day: "numeric", timeZone: TZ });
   }
 
-  // ---- header label: "this week · Jul 7–13" from the real 7-day span ----
+  // ---- header label: "Jul 7–13" from the real 7-day span ----
   const weekLbl = document.getElementById("calWeekLbl");
   if (weekLbl) {
     const first = new Date(dayKeys[0] + "T12:00:00");
@@ -565,8 +582,8 @@
     const mFmt = (d) => d.toLocaleDateString("en-US", { month: "short", timeZone: TZ });
     const dFmt = (d) => d.toLocaleDateString("en-US", { day: "numeric", timeZone: TZ });
     weekLbl.textContent = sameMonth
-      ? `this week · ${mFmt(first)} ${dFmt(first)}–${dFmt(last)}`
-      : `this week · ${mFmt(first)} ${dFmt(first)}–${mFmt(last)} ${dFmt(last)}`;
+      ? `${mFmt(first)} ${dFmt(first)}–${dFmt(last)}`
+      : `${mFmt(first)} ${dFmt(first)}–${mFmt(last)} ${dFmt(last)}`;
   }
 
   function render() {
@@ -586,15 +603,14 @@
       const today = k === TODAY_KEY;
       const n = byDay.get(k).length;
       const empty = n === 0;
-      const cnt = empty ? "&mdash;" : (n + " on tap");
-      // "on tap" counts every filtered event for the day (uncapped); the
-      // grid itself only ever draws the top DAY_CAP by booze score, so the
-      // gap between the two numbers is what "+N more" reports below.
+      // the grid only ever draws the top DAY_CAP by booze score; any events
+      // beyond that surface through the actionable "+N more" link below
+      // (the old redundant per-day total count has been removed).
       const overflow = Math.max(0, n - DAY_CAP);
       const more = overflow > 0
-        ? `<a href="#" class="more" data-day="${k}" title="the rest of today, sorted by pour — soon: the weekly view">+${overflow} more &rarr;</a>`
+        ? `<a href="/week" class="more" data-day="${k}" title="see the rest of this day in the weekly view">+${overflow} more &rarr;</a>`
         : "";
-      html += `<div class="cal-head ${today ? "today" : ""} ${empty ? "empty" : ""}"><span class="dow">${fmtDow(k)}</span><span class="num">${fmtNum(k)}</span><span class="cnt">${cnt}</span>${more}</div>`;
+      html += `<div class="cal-head ${today ? "today" : ""} ${empty ? "empty" : ""}"><span class="dow">${fmtDow(k)}</span><span class="num">${fmtNum(k)}</span>${more}</div>`;
     });
 
     html += `<div class="gutter">`;
@@ -652,6 +668,10 @@
   // exactly put as they light up / dim.
   const threshRange = document.getElementById("threshRange");
   const threshRead = document.getElementById("threshRead");
+  // apply any restored (localStorage) threshold to the control before first render
+  threshRange.value = state.thresh;
+  threshRange.style.setProperty("--p", state.thresh);
+  threshRead.textContent = state.thresh + "%";
   function relight() {
     document.querySelectorAll(".evt").forEach(chip => {
       const lit = parseInt(chip.dataset.booze, 10) >= state.thresh;
@@ -662,20 +682,40 @@
     state.thresh = parseInt(threshRange.value, 10);
     threshRange.style.setProperty("--p", state.thresh);
     threshRead.textContent = state.thresh + "%";
+    saveF({ thresh: state.thresh });
     relight();
   });
 
   // ---- distance stepper (FLAT seg) ----
   const distSeg = document.getElementById("distSeg");
+  // reflect any restored distance cap onto the seg before the first render
+  distSeg.querySelectorAll("button").forEach(b => {
+    const mi = b.dataset.mi === "" ? null : parseFloat(b.dataset.mi);
+    if (mi === state.maxMi) b.setAttribute("aria-current", "true");
+    else b.removeAttribute("aria-current");
+  });
   distSeg.querySelectorAll("button").forEach(btn => {
     btn.addEventListener("click", () => {
       distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
       btn.setAttribute("aria-current", "true");
       const mi = btn.dataset.mi;
       state.maxMi = mi === "" ? null : parseFloat(mi);
+      saveF({ maxMi: state.maxMi });
       closePop();
       render();
     });
+  });
+
+  // ---- free toggle (STAMP; hard filter, mirrors week.html) ----
+  const freeToggle = document.getElementById("freeToggle");
+  // reflect any restored free state onto the stamp before the first render
+  freeToggle.setAttribute("aria-pressed", String(state.freeOnly));
+  freeToggle.addEventListener("click", () => {
+    state.freeOnly = !state.freeOnly;
+    freeToggle.setAttribute("aria-pressed", String(state.freeOnly));
+    saveF({ free: state.freeOnly });
+    closePop();
+    render();
   });
 
   // ---- tag + source chip popovers (same pattern as design_real.html) ----
@@ -683,12 +723,12 @@
   // behavior and the deferred item noted in DESIGN.md.
   const filterPopovers = [];
 
-  function makeChipPopover(btnId, panelId, labelBase, counts, stateSet) {
+  function makeChipPopover(btnId, panelId, labelBase, counts, stateSet, saveKey) {
     const btn = document.getElementById(btnId);
     const panel = document.getElementById(panelId);
     const keys = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
     panel.innerHTML = keys.map(k =>
-      `<button type="button" class="fb-chip" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
+      `<button type="button" class="fb-chip${stateSet.has(k) ? " on" : ""}" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
     ).join("");
     panel.querySelectorAll(".fb-chip").forEach(chip => {
       chip.addEventListener("click", () => {
@@ -696,6 +736,7 @@
         if (stateSet.has(k)) stateSet.delete(k); else stateSet.add(k);
         chip.classList.toggle("on", stateSet.has(k));
         updateBtn();
+        saveF({ [saveKey]: [...stateSet] });
         closePop();
         render();
       });
@@ -704,6 +745,8 @@
       if (stateSet.size) { btn.textContent = labelBase + " · " + stateSet.size; btn.classList.add("active"); }
       else { btn.textContent = labelBase; btn.classList.remove("active"); }
     }
+    // reflect any restored selection onto the trigger before the first render
+    updateBtn();
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
       const open = !panel.classList.contains("open");
@@ -728,8 +771,8 @@
   const sourceCounts = new Map();
   EVENTS.forEach(e => sourceCounts.set(e.source, (sourceCounts.get(e.source) || 0) + 1));
 
-  makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags);
-  makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources);
+  makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags, "tags");
+  makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources, "sources");
 
   render();
 })();

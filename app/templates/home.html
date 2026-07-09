@@ -84,8 +84,12 @@
               letter-spacing: 0.02em; }
   .day-when b { color: var(--muted); font-weight: 600; }
 
-  /* ---- the ONE knob: distance ---- */
-  .day-dist { display: flex; align-items: center; gap: 9px; margin: 14px 0 0; }
+  /* ---- filter knobs: distance + free + tags + source ---- */
+  .day-dist { display: flex; align-items: center; gap: 9px; margin: 14px 0 0;
+              flex-wrap: wrap; row-gap: 8px; }
+  /* the filter group wraps as ONE unit — never splits mid-group */
+  .day-filters { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+                 flex: none; }
   .day-dist-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
               color: var(--faint); white-space: nowrap; }
   .fb-seg { display: inline-flex; gap: 2px; background: var(--card2);
@@ -100,6 +104,52 @@
   .fb-seg button:active { transform: scale(0.96); }
   .fb-seg button[aria-current="true"] { background: var(--gold); color: var(--bg); }
   .fb-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* free toggle — a STAMP: press-and-rotate */
+  .fb-stamp { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; flex: none;
+              transition: transform .12s var(--ease), color .15s, border-color .15s; }
+  .fb-stamp:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-stamp:active { transform: scale(0.94) rotate(-2deg); }
+  .fb-stamp:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-stamp[aria-pressed="true"] { color: var(--gold); border-color: var(--gold);
+              transform: rotate(-3deg); }
+
+  /* chip popovers (tags, source) — triggers are FLAT */
+  .fb-pop { position: relative; flex: none; }
+  .fb-pop-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; white-space: nowrap;
+              transition: color .15s, border-color .15s, transform .12s var(--ease); }
+  .fb-pop-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-pop-btn:active { transform: scale(0.96); }
+  .fb-pop-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-pop-btn.active { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+              min-width: 200px; max-width: 260px;
+              background-color: var(--card2); background-image: var(--grain);
+              border: 1px solid var(--line2); border-radius: 16px; padding: 10px;
+              box-shadow: var(--elev-pop);
+              display: none; flex-wrap: wrap; gap: 6px; }
+  .fb-panel.open { display: flex; }
+  .fb-chip { font-size: 11px; color: var(--muted); background: var(--card);
+             border: 1px solid var(--line2); border-radius: 99px; padding: 4px 10px;
+             cursor: pointer; transition: color .15s, border-color .15s,
+             transform .12s var(--ease); }
+  .fb-chip:hover { color: var(--text); }
+  .fb-chip:active { transform: scale(0.96); }
+  .fb-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-chip .n { color: var(--faint); margin-left: 4px; }
+  .fb-chip.on { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-chip.on .n { color: var(--gold-dim); }
+
+  @media (max-width: 480px) {
+    .fb-stamp, .fb-pop-btn { padding: 5px 7px; letter-spacing: 0.08em; }
+    .day-filters { gap: 5px; }
+  }
 
   /* ---- hero: the one place the system is allowed to be loud ---- */
   .hero-kicker { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; }
@@ -169,7 +219,6 @@
   <div class="lab" data-pal="brass">
     <div class="day-wrap">
       <div class="day-head">
-        <p class="day-mark"><em>slosh<span class="tip">bot</span></em></p>
         <p class="day-when" id="dayWhen">tonight &middot; &hellip;</p>
         <div class="day-dist">
           <span class="day-dist-lbl">within</span>
@@ -179,6 +228,17 @@
             <button type="button" data-mi="2">2<i>mi</i></button>
             <button type="button" data-mi="3">3<i>mi</i></button>
             <button type="button" data-mi="5">5<i>mi</i></button>
+          </div>
+          <div class="day-filters">
+            <button type="button" class="fb-stamp" id="freeToggle" aria-pressed="false">free</button>
+            <div class="fb-pop">
+              <button type="button" class="fb-pop-btn" id="tagsBtn" aria-expanded="false">tags</button>
+              <div class="fb-panel" id="tagsPanel"></div>
+            </div>
+            <div class="fb-pop">
+              <button type="button" class="fb-pop-btn" id="sourceBtn" aria-expanded="false">source</button>
+              <div class="fb-panel" id="sourcePanel"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -194,16 +254,26 @@
   const EVENTS = JSON.parse(document.getElementById("events-data").textContent);
   const THRESH = 65; // the booze threshold gate, fixed for this draft (no slider on Tonight)
 
-  // the ONE knob on Tonight: distance cap (null = no cap). Distance is a
-  // filter, never a score — it only narrows the set the ranking runs over.
-  const state = { maxMi: null };
+  // Tonight's filters narrow the pool the ranking runs over — none is a score.
+  // distance cap (null = no cap), free-only, tag set, source set.
+  const state = { maxMi: null, free: false, tags: new Set(), sources: new Set() };
 
-  // distance is the only predicate. Null distance always PASSES (unknown
-  // location is never dropped — matches the weekly view / app behavior).
-  function passesDistance(e) {
-    if (state.maxMi === null) return true;
-    if (e.distance_mi === null || e.distance_mi === undefined) return true;
-    return e.distance_mi <= state.maxMi;
+  // ---- shared cross-page filter persistence (localStorage "slosh.filters") ----
+  // JSON object, merge-patch only: Tonight never writes the thresh key, so
+  // whatever week/calendar/map stored there survives untouched.
+  function loadF(){ try { return JSON.parse(localStorage.getItem("slosh.filters")) || {}; } catch(_) { return {}; } }
+  function saveF(patch){ try { localStorage.setItem("slosh.filters", JSON.stringify(Object.assign(loadF(), patch))); } catch(_) {} }
+
+  // hard filters, combined. Null distance always PASSES (unknown location is
+  // never dropped) and untagged events are never dropped by the tag filter —
+  // both matching the weekly view / app behavior. is_free is a 3-state
+  // 0/1/null field: only 1 counts as free. Every event has a source.
+  function passesFilters(e) {
+    if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi !== undefined && e.distance_mi > state.maxMi) return false;
+    if (state.free && e.is_free !== 1) return false;
+    if (state.tags.size && (e.tags || []).length && !(e.tags || []).some(t => state.tags.has(t))) return false;
+    if (state.sources.size && !state.sources.has(e.source)) return false;
+    return true;
   }
 
   // ---- helpers (ported from design_real.html's real-data build) ----
@@ -240,7 +310,7 @@
   function metaShortOf(e) {
     const venue = cleanVenue(e.venue_name);
     const read = boozeRead(e.booze);
-    return [fmtTime(e.starts_at), `<span class="ta-read">${read}</span>`, venue ? escapeHtml(venue) : null]
+    return [fmtTime(e.starts_at), `<span class="ta-read">${read}</span>`, (e.neighborhood ? escapeHtml(e.neighborhood) : (venue ? escapeHtml(venue) : null))]
       .filter(Boolean).join(" &middot; ");
   }
   function metaFullOf(e) {
@@ -279,9 +349,9 @@
       <p class="ta-why" title="${blurb}">${blurb}</p>
       <div class="ta-more"><div class="ta-more-inner">
         <div class="ta-meta-full">${metaFullOf(e)}</div>
-        <div class="ta-pour"><span class="q">why the pour</span>${rationale} <span class="ta-raw">&middot; ${e.booze}% by the numbers</span></div>
+        <div class="ta-pour"><span class="q">why the pour</span>${rationale}</div>
       </div></div>
-      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(e.gcal)}">+ hold</button></div>
+      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(e.gcal)}">+ calendar</button></div>
       <div class="ta-stamp-row"><span class="q">any booze?</span>
         <button class="ta-stamp" data-stamp>yep</button>
         <button class="ta-stamp miss" data-stamp="miss">nope</button></div>
@@ -305,9 +375,9 @@
       <div class="ta-meta">${metaFullOf(e)}</div>
       <p class="ta-why">${blurb}</p>
       <div class="ta-more"><div class="ta-more-inner">
-        <div class="ta-pour"><span class="q">why the pour</span>${rationale} <span class="ta-raw">&middot; ${e.booze}% by the numbers</span></div>
+        <div class="ta-pour"><span class="q">why the pour</span>${rationale}</div>
       </div></div>
-      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(e.gcal)}">+ hold</button></div>
+      <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(e.gcal)}">+ calendar</button></div>
       <div class="ta-stamp-row"><span class="q">any booze?</span>
         <button class="ta-stamp" data-stamp>yep</button>
         <button class="ta-stamp miss" data-stamp="miss">nope</button></div>
@@ -318,8 +388,8 @@
     const root = document.getElementById("dayRoot");
     const when = document.getElementById("dayWhen");
 
-    // filter first, THEN rank — so a tightened cap can change the hero.
-    const pool = EVENTS.filter(passesDistance);
+    // filter first, THEN rank — so a tightened filter can change the hero.
+    const pool = EVENTS.filter(passesFilters);
 
     if (!pool.length) {
       // preserve the dateline if we know it; the count is now zero.
@@ -384,17 +454,99 @@
     if (card) card.classList.toggle("open");
   });
 
-  // ---- distance stepper (the only knob) — sets the cap and re-pours ----
+  // ---- chip popovers (tags + source share one pattern) ----
+  const popovers = [];
+
+  function makeChipPopover(btnId, panelId, labelBase, counts, stateSet, persist) {
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+    const keys = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
+    panel.innerHTML = keys.map(k =>
+      `<button type="button" class="fb-chip${stateSet.has(k) ? " on" : ""}" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
+    ).join("");
+    panel.querySelectorAll(".fb-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const k = chip.dataset.key;
+        if (stateSet.has(k)) stateSet.delete(k); else stateSet.add(k);
+        chip.classList.toggle("on", stateSet.has(k));
+        updateBtn();
+        persist();
+        render();
+      });
+    });
+    function updateBtn() {
+      if (stateSet.size) {
+        btn.textContent = labelBase + " · " + stateSet.size;
+        btn.classList.add("active");
+      } else {
+        btn.textContent = labelBase;
+        btn.classList.remove("active");
+      }
+    }
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const open = !panel.classList.contains("open");
+      popovers.forEach(p => { p.panel.classList.remove("open"); p.btn.setAttribute("aria-expanded", "false"); });
+      panel.classList.toggle("open", open);
+      btn.setAttribute("aria-expanded", String(open));
+    });
+    updateBtn();   // reflect any restored selection in the trigger label
+    popovers.push({ btn, panel });
+  }
+
+  document.addEventListener("click", (ev) => {
+    popovers.forEach(p => {
+      if (!p.panel.contains(ev.target) && ev.target !== p.btn) {
+        p.panel.classList.remove("open");
+        p.btn.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+
+  const tagCounts = new Map();
+  EVENTS.forEach(e => (e.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+  const sourceCounts = new Map();
+  EVENTS.forEach(e => sourceCounts.set(e.source, (sourceCounts.get(e.source) || 0) + 1));
+
+  // ---- distance stepper — sets the cap and re-pours ----
   const distSeg = document.getElementById("distSeg");
+  function syncDistSeg() {
+    distSeg.querySelectorAll("button").forEach(b => {
+      const mi = b.dataset.mi === "" ? null : parseFloat(b.dataset.mi);
+      if (mi === state.maxMi) b.setAttribute("aria-current", "true");
+      else b.removeAttribute("aria-current");
+    });
+  }
   distSeg.querySelectorAll("button").forEach(btn => {
     btn.addEventListener("click", () => {
-      distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
-      btn.setAttribute("aria-current", "true");
       const mi = btn.dataset.mi;
       state.maxMi = mi === "" ? null : parseFloat(mi);
+      syncDistSeg();
+      saveF({ maxMi: state.maxMi });
       render();
     });
   });
+
+  // ---- free toggle ----
+  const freeToggle = document.getElementById("freeToggle");
+  freeToggle.addEventListener("click", () => {
+    state.free = !state.free;
+    freeToggle.setAttribute("aria-pressed", String(state.free));
+    saveF({ free: state.free });
+    render();
+  });
+
+  // ---- INIT: restore persisted filters, sync controls, then render ----
+  const f = loadF();
+  if (f.maxMi !== undefined) state.maxMi = f.maxMi;   // null (any) or a number
+  state.free = !!f.free;
+  state.tags = new Set(f.tags || []);
+  state.sources = new Set(f.sources || []);
+
+  syncDistSeg();
+  freeToggle.setAttribute("aria-pressed", String(state.free));
+  makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags, () => saveF({ tags: [...state.tags] }));
+  makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources, () => saveF({ sources: [...state.sources] }));
 
   render();
 })();

@@ -46,7 +46,7 @@
     /* whisper grain: 64px feTurbulence tile at 0.03 — look for it or miss it */
     --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='64' height='64' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
   }
-  #real { max-width: 720px; margin: 0 auto; }
+  #real { max-width: 720px; margin: 0 auto; padding: 0 20px; box-sizing: border-box; }
   .day { margin-top: 28px; }
   .day:first-of-type { margin-top: 0; }
   .stack { display: grid; gap: 18px; }
@@ -58,15 +58,13 @@
   .ta-card.confident:hover { box-shadow: var(--elev-glow-hover); }
   .ta-card.confident:active { box-shadow: var(--elev-glow-press); }
 
-  /* ---- sticky filter bar ---- */
-  .fb { position: sticky; top: 0; z-index: 30; background: rgba(15,9,8,0.86);
+  /* ---- ROW 2: the per-view control bar, pinned just under the sticky
+     site header (ROW 1). ---- */
+  .fb { position: sticky; top: var(--hdr-h); z-index: 30; background: rgba(15,9,8,0.86);
         -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
         border-bottom: 1px solid var(--line2); }
   .fb .wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-              row-gap: 8px; padding-top: 10px; padding-bottom: 10px; }
-  .fb-mark { font-family: var(--serif); font-style: italic; font-weight: 600;
-             font-size: 23px; line-height: 1.1; color: var(--text); margin: 0; flex: none; }
-  .fb-mark .tip { color: var(--gold); }
+              row-gap: 8px; padding: 12px 20px; box-sizing: border-box; }
 
   .fb-ctl { display: flex; align-items: center; gap: 8px; }
   .fb-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
@@ -163,7 +161,8 @@
   /* mobile: keep the bar to (at most) mark+slider row and one tidy
      controls row — the group never splits mid-group */
   @media (max-width: 480px) {
-    .fb .wrap { gap: 10px; }
+    #real { padding: 0 14px; }
+    .fb .wrap { gap: 10px; padding-left: 14px; padding-right: 14px; }
     .thresh { min-width: 130px; flex-basis: 130px; }
     .fb-seg button { padding: 4px 6px; }
     .fb-seg button i { display: none; }
@@ -174,7 +173,8 @@
   /* ---- sticky day headers, riding just under the filter bar
          (bar height measured in JS into --fb-h so wrapping stays safe).
          The header is a full-width TOGGLE that collapses/expands its day. ---- */
-  .dayhead { display: flex; align-items: baseline; gap: 11px; margin: 0 0 12px;
+  .dayhead { display: flex; align-items: baseline; gap: 14px; margin: 0 0 12px;
+             flex-wrap: wrap;
              width: 100%; text-align: left; font: inherit; color: inherit;
              padding: 10px 0 8px; border: none; border-bottom: 1px solid var(--line2);
              position: sticky; top: var(--fb-h, 56px); z-index: 20; cursor: pointer;
@@ -196,7 +196,8 @@
   .dayhead .date { font-size: 10.5px; letter-spacing: 0.14em; color: var(--gold-dim);
                    font-variant-numeric: oldstyle-nums; }
   .dayhead .cnt { font-size: 11.5px; color: var(--faint);
-                  font-variant-numeric: oldstyle-nums; margin-left: auto; }
+                  font-variant-numeric: oldstyle-nums; margin-left: auto;
+                  padding-left: 10px; }
   .dayhead .cnt b { color: var(--gold-dim); font-weight: 600; }
 
   .more { margin-top: 16px; }
@@ -259,8 +260,6 @@
   <div class="lab" data-pal="brass">
     <div class="fb">
       <div class="wrap">
-        <p class="fb-mark"><em>slosh<span class="tip">bot</span></em></p>
-
         <div class="fb-ctl thresh">
           <span class="fb-lbl">chance of booze</span>
           <input type="range" min="0" max="100" step="1" value="65"
@@ -299,6 +298,19 @@
     const EVENTS = JSON.parse(document.getElementById("events-data").textContent);
 
     const state = { thresh: 65, maxMi: null, freeOnly: false, tags: new Set(), sources: new Set() };
+
+    // ---- shared cross-page filter persistence (week / calendar / map) ----
+    // Single JSON object under "slosh.filters"; helpers merge-patch so each
+    // view only writes the field it owns and never clobbers the others.
+    function loadF(){ try { return JSON.parse(localStorage.getItem("slosh.filters")) || {}; } catch(_) { return {}; } }
+    function saveF(patch){ try { localStorage.setItem("slosh.filters", JSON.stringify(Object.assign(loadF(), patch))); } catch(_) {} }
+
+    const f = loadF();
+    if (typeof f.thresh === "number" && f.thresh >= 0 && f.thresh <= 100) state.thresh = f.thresh;
+    if (f.maxMi === null || typeof f.maxMi === "number") state.maxMi = f.maxMi;
+    if (typeof f.free === "boolean") state.freeOnly = f.free;
+    state.tags = new Set(f.tags || []);
+    state.sources = new Set(f.sources || []);
     const lazyRest = new Map();   // dayKey -> below-threshold events, built on first disclosure open
 
     // ---- helpers ----
@@ -343,7 +355,7 @@
     // ---- chip popovers (tags + source share one pattern) ----
     const popovers = [];
 
-    function makeChipPopover(btnId, panelId, labelBase, counts, stateSet) {
+    function makeChipPopover(btnId, panelId, labelBase, counts, stateSet, saveKey) {
       const btn = document.getElementById(btnId);
       const panel = document.getElementById(panelId);
       const keys = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
@@ -351,14 +363,17 @@
         `<button type="button" class="fb-chip" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
       ).join("");
       panel.querySelectorAll(".fb-chip").forEach(chip => {
+        chip.classList.toggle("on", stateSet.has(chip.dataset.key));   // reflect restored selection
         chip.addEventListener("click", () => {
           const k = chip.dataset.key;
           if (stateSet.has(k)) stateSet.delete(k); else stateSet.add(k);
           chip.classList.toggle("on", stateSet.has(k));
           updateBtn();
+          saveF({ [saveKey]: [...stateSet] });
           render();
         });
       });
+      updateBtn();   // reflect restored selection count on the trigger button
       function updateBtn() {
         if (stateSet.size) {
           btn.textContent = labelBase + " · " + stateSet.size;
@@ -414,7 +429,7 @@
       const read = boozeRead(e.booze);   // tooltip only — no visible label on this view
       // collapsed: time · venue. The coupe fill carries the booze signal;
       // the verbal read was removed from the card as unnecessary noise here.
-      const metaShort = [fmtTime(e.starts_at), venue ? escapeHtml(venue) : null]
+      const metaShort = [fmtTime(e.starts_at), e.neighborhood ? escapeHtml(e.neighborhood) : (venue ? escapeHtml(venue) : null)]
         .filter(Boolean).join(" &middot; ");
       // expanded: the whole dateline
       const fullParts = [
@@ -442,9 +457,9 @@
         <p class="ta-why" title="${blurb}">${blurb}</p>
         <div class="ta-more"><div class="ta-more-inner">
           <div class="ta-meta-full">${metaFull}</div>
-          <div class="ta-pour"><span class="q">why the pour</span>${rationale} <span class="ta-raw">&middot; ${e.booze}% by the numbers</span></div>
+          <div class="ta-pour"><span class="q">why the pour</span>${rationale}</div>
         </div></div>
-        <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(e.gcal || '')}">+ hold</button></div>
+        <div class="ta-foot"><div class="ta-tags">${tags}</div><button class="ta-hold" data-gcal="${escapeHtml(e.gcal || '')}">+ calendar</button></div>
         <div class="ta-stamp-row"><span class="q">any booze?</span>
           <button class="ta-stamp" data-stamp>yep</button>
           <button class="ta-stamp miss" data-stamp="miss">nope</button></div>
@@ -617,11 +632,16 @@
     // longer rebuilds the whole view on every pixel; release also flushes.
     const threshInput = document.getElementById("threshRange");
     const threshRead = document.getElementById("threshRead");
+    // apply any restored (localStorage) threshold to the control before first render
+    threshInput.value = state.thresh;
+    threshInput.style.setProperty("--p", state.thresh);
+    threshRead.textContent = state.thresh + "%";
     let threshTimer = null;
     threshInput.addEventListener("input", () => {
       state.thresh = parseInt(threshInput.value, 10);
       threshInput.style.setProperty("--p", state.thresh);
       threshRead.textContent = state.thresh + "%";     // live, cheap
+      saveF({ thresh: state.thresh });
       clearTimeout(threshTimer);
       threshTimer = setTimeout(render, 140);           // re-gate, debounced
     });
@@ -633,26 +653,33 @@
     // ---- distance stepper ----
     const distSeg = document.getElementById("distSeg");
     distSeg.querySelectorAll("button").forEach(btn => {
+      // reflect any restored distance cap on the segmented control
+      const btnMi = btn.dataset.mi === "" ? null : parseFloat(btn.dataset.mi);
+      if (btnMi === state.maxMi) btn.setAttribute("aria-current", "true");
+      else btn.removeAttribute("aria-current");
       btn.addEventListener("click", () => {
         distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
         btn.setAttribute("aria-current", "true");
         const mi = btn.dataset.mi;
         state.maxMi = mi === "" ? null : parseFloat(mi);
+        saveF({ maxMi: state.maxMi });
         render();
       });
     });
 
     // ---- free toggle ----
     const freeToggle = document.getElementById("freeToggle");
+    freeToggle.setAttribute("aria-pressed", String(state.freeOnly));   // reflect restored state
     freeToggle.addEventListener("click", () => {
       state.freeOnly = !state.freeOnly;
       freeToggle.setAttribute("aria-pressed", String(state.freeOnly));
+      saveF({ free: state.freeOnly });
       render();
     });
 
     // ---- popovers ----
-    makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags);
-    makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources);
+    makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags, "tags");
+    makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources, "sources");
 
     render();
   })();
