@@ -1,0 +1,17 @@
+{# Three-way "nothing to show" state — cold-start warming-up / filtered-empty /
+   genuinely-quiet-week. Expects: warming_up, included_tags, included_sources,
+   price_filter, max_mi, min_booze, and an optional empty_scope string (e.g.
+   " this week") appended to the copy — set it with {% set empty_scope = ... %}
+   before including, or omit for no suffix. #}
+{% set scope = empty_scope | default('') %}
+{% if warming_up %}
+  <div class="empty"><div class="coupe pouring"><i></i></div>
+    Pouring your first round — fetching events now.<br>
+    <small>This page refreshes itself in a moment.</small></div>
+{% elif included_tags or included_sources or price_filter or max_mi or min_booze %}
+  <div class="empty"><div class="coupe"></div>Nothing matches your filters{{ scope }}.<br>
+    <small>Loosen them above to see more.</small></div>
+{% else %}
+  <div class="empty"><div class="coupe"></div>Nothing on the radar{{ scope }}.<br>
+    <small>Check back soon — new events land a few times a day.</small></div>
+{% endif %}

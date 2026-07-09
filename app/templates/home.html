@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {% if warming_up %}<meta http-equiv="refresh" content="12">{% endif %}
 <title>sloshbot</title>
+{% import "_meter.html" as m %}
 {% include "_theme.html" %}
 <style>
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 20px 80px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
 
   .debrief { background: var(--card2); border: 1px solid var(--gold-dim); border-radius: 12px;
              padding: 14px 16px; margin-bottom: 22px; }
@@ -66,126 +67,10 @@
     </nav>
   </header>
 
-  {% set back = '/' %}
-  <div class="layout">
-  {% include "_sidebar.html" %}
-  <div class="main">
+  {% include "_filterbar.html" %}
 
-  {% if debrief %}
-  <div class="debrief" id="debrief">
-    <a class="dismiss" href="javascript:document.getElementById('debrief').remove()">dismiss</a>
-    <div class="t">{{ debrief.when }}: {{ debrief.title }}</div>
-    <div class="q">did you go?</div>
-    <button class="btn" data-verdict="went" onclick="fb(this, '{{ debrief.event_id }}', 'went', '')">went</button>
-    <button class="btn" data-verdict="skipped" onclick="fb(this, '{{ debrief.event_id }}', 'skipped', '')">skipped</button>
-    <div class="q">was the {{ debrief.lens }} as promised?</div>
-    <button class="btn" data-verdict="as_promised" onclick="fb(this, '{{ debrief.event_id }}', 'as_promised', '{{ debrief.lens }}')">as promised</button>
-    <button class="btn" data-verdict="not_as_promised" onclick="fb(this, '{{ debrief.event_id }}', 'not_as_promised', '{{ debrief.lens }}')">not as promised</button>
-  </div>
-  {% endif %}
-
-  {% if not hero %}
-    {% if warming_up %}
-      <div class="empty"><div class="coupe pouring"><i></i></div>
-        Pouring your first round — fetching events now.<br>
-        <small>This page refreshes itself in a moment.</small></div>
-    {% elif included_tags or max_mi or min_booze %}
-      <div class="empty"><div class="coupe"></div>Nothing matches your filters this week.<br>
-        <small>Loosen them above to see more.</small></div>
-    {% else %}
-      <div class="empty"><div class="coupe"></div>Nothing on the radar this week.<br>
-        <small>Check back soon — new events land a few times a day.</small></div>
-    {% endif %}
-  {% else %}
-  <div class="hero">
-    <div class="label"><span class="pulse"></span>{{ hero_label }}</div>
-    <span class="arc lg" style="--p: {{ (hero.match * 100) | round | int }}"
-          title="match {{ (hero.match * 100) | round | int }}"></span>
-    <div class="title"><a href="{{ hero.url }}" target="_blank">{{ hero.title }}</a></div>
-    <div class="meta">
-      {{ hero.start_dt.strftime("%-I:%M") }}–{{ hero.end_dt.strftime("%-I:%M %p") }}
-      · {{ hero.venue_name or "venue TBA" }}{% if hero.neighborhood %} ({{ hero.neighborhood }}){% endif %}
-      {% if hero.distance_mi is not none %} · {{ "%.1f" | format(hero.distance_mi) }} mi{% endif %}
-      {% if hero.host_name %} · by {{ hero.host_name }}{% endif %}
-      {% if hero.host_rep %} · <span class="rep {{ 'good' if hero.host_rep.miss == 0 else 'bad' }}">host
-        {{ hero.host_rep.ok }}/{{ hero.host_rep.ok + hero.host_rep.miss }} as promised</span>{% endif %}
-      {% if hero.rsvp_type and hero.rsvp_type != 'open' %} · <span class="rsvp">{{ hero.rsvp_type }}</span>{% endif %}
-    </div>
-    {% if hero.rationales.get(lens) %}
-      <div class="why"><span class="meter" title="{{ lens }} {{ (hero.scores.get(lens, 0) * 100) | round | int }}%">&#127864;&nbsp;{% for i in range(5) %}<i class="{{ 'on' if hero.scores.get(lens, 0) * 5 >= i + 0.5 }}"></i>{% endfor %}</span>
-        — {{ hero.rationales.get(lens) }}</div>
-    {% endif %}
-    {% if hero.tags %}
-      <div class="tags">{% for t in hero.tags %}<span class="tag {{ 'on' if t in included_tags | default([]) }}"
-        onclick="toggleTag('{{ t }}')" title="filter to this tag">{{ t }}</span>{% endfor %}</div>
-    {% endif %}
-    <div class="actions">
-      <button class="btn primary" onclick="hold(this, '{{ hero.id }}', '{{ hero.gcal }}', '{{ lens }}')">+ hold on calendar</button>
-    </div>
-  </div>
-
-  {% if backups %}
-  <details class="section">
-    <summary>or… {{ backups | length }} backup{{ '' if backups|length == 1 else 's' }} tonight</summary>
-    {% for e in backups %}
-      <details class="crow">
-        <summary><span class="n">{{ e.title }}</span>
-          <span class="w">{{ e.start_dt.strftime("%-I:%M %p") }}</span>
-          <span class="m"><span class="arc dim" style="--p: {{ (e.match * 100) | round | int }}"
-            title="match {{ (e.match * 100) | round | int }}"></span></span></summary>
-        {% include "_card.html" %}
-      </details>
-    {% endfor %}
-  </details>
-  {% endif %}
-
-  {% if n_later %}
-  <details class="section">
-    <summary>everything else this week ({{ n_later }})</summary>
-    {% for day, evts in later_days %}
-      <h3 class="dayhead">{{ day }}</h3>
-      {% for e in evts %}
-        <details class="crow">
-          <summary><span class="n">{{ e.title }}</span>
-            <span class="w">{{ e.start_dt.strftime("%-I:%M %p") }}</span>
-            <span class="m"><span class="arc dim" style="--p: {{ (e.match * 100) | round | int }}"
-              title="match {{ (e.match * 100) | round | int }}"></span></span></summary>
-          {% include "_card.html" %}
-        </details>
-      {% endfor %}
-    {% endfor %}
-  </details>
-  {% endif %}
-  {% endif %}
-  </div><!-- /main -->
-  </div><!-- /layout -->
+  <div id="page-main">{% include "_main_home.html" %}</div>
 </div>
-<script>
-  const FB_PAIRS = { went: "skipped", skipped: "went",
-                     as_promised: "not_as_promised", not_as_promised: "as_promised" };
-  async function fb(btn, eventId, verdict, lens) {
-    const res = await fetch(`/feedback/${eventId}/${verdict}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
-    const { state } = await res.json();
-    btn.classList.toggle("done", state === "on");
-    if (state === "on") {
-      const other = btn.parentElement.querySelector(`[data-verdict="${FB_PAIRS[verdict]}"]`);
-      if (other) other.classList.remove("done");
-    }
-  }
-  async function toggleTag(tag) {
-    await fetch(`/settings/tags/toggle?tag=${encodeURIComponent(tag)}`, { method: "POST" });
-    location.reload();
-  }
-  async function clearFilters(back) {
-    await fetch("/settings/tags/clear", { method: "POST" });
-    location.href = back;
-  }
-  async function hold(btn, eventId, gcal, lens) {
-    fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
-    window.open(gcal, "_blank");
-    btn.classList.add("done");
-    btn.textContent = "held \u2713";
-  }
-</script>
+{% include "_feedback.html" %}
 </body>
 </html>

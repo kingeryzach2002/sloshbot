@@ -1,0 +1,282 @@
+{# Top filter bar — custom dropdowns (no native <select>), the single home for
+   all filters across every view (Tonight/Week/Calendar/Map).
+   Filter state lives client-side in the FILTERS JS object (seeded from
+   active_filters) and is reflected into the URL + a fragment refetch on every
+   change — no page reload. See docs/no-reload contract.
+   Expects: has_home, max_mi, min_booze, tag_counts, included_tags,
+   source_counts, included_sources, price_counts, price_filter, active_filters. #}
+<style>
+  .filterbar { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 22px; position: relative; z-index: 10; }
+  .fdrop { position: relative; }
+  .fbtn { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px;
+          padding: 6px 13px; border-radius: 9px; cursor: pointer;
+          border: 1px solid var(--line); background: var(--card2); color: var(--text);
+          transition: border-color .2s, color .2s; }
+  .fbtn:hover { border-color: var(--gold-dim); }
+  .fbtn.active { border-color: var(--gold); color: var(--gold); }
+  .fbtn .care { font-size: 9px; opacity: 0.6; transition: transform .15s var(--ease); }
+  .fbtn.open .care { transform: rotate(180deg); }
+  .fpanel { position: absolute; top: calc(100% + 8px); left: 0; min-width: 190px; max-width: 280px;
+            display: flex; flex-direction: column; gap: 1px;
+            background: var(--card2); border: 1px solid var(--line); border-radius: 12px;
+            padding: 7px; box-shadow: 0 14px 32px -10px rgba(0, 0, 0, 0.55); z-index: 30;
+            opacity: 0; visibility: hidden; transform: translateY(-4px);
+            transition: opacity .15s var(--ease), transform .15s var(--ease), visibility .15s; }
+  .fpanel.open { opacity: 1; visibility: visible; transform: translateY(0); }
+  .fpanel.scroll { max-height: 280px; overflow-y: auto; }
+  .fopt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px;
+          font-size: 13px; color: var(--muted); cursor: pointer; text-decoration: none;
+          white-space: nowrap; transition: background .15s, color .15s; }
+  .fopt:hover { background: var(--card); color: var(--text); }
+  .fopt.on, .fopt:has(input:checked) { color: var(--gold); }
+  .fopt input[type=checkbox] { accent-color: var(--gold); margin: 0; }
+  .fopt i { margin-left: auto; font-style: normal; opacity: 0.55; font-size: 11px; }
+  .fclear { display: block; text-align: center; margin-top: 3px; padding-top: 7px;
+            border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted);
+            text-decoration: underline; cursor: pointer; }
+  .fclear:hover { color: var(--red); }
+</style>
+<div class="filterbar">
+  {% if has_home %}
+  <div class="fdrop" data-kind="distance">
+    <button type="button" class="fbtn" onclick="toggleDropdown(this)">
+      distance <i class="care">&#9662;</i></button>
+    <div class="fpanel">
+      <a class="fopt" data-mi="">any distance</a>
+      {% for mi in [1, 2, 3, 5] %}
+        <a class="fopt" data-mi="{{ mi }}">&le; {{ mi }} mi</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="fdrop" data-kind="booze">
+    <button type="button" class="fbtn" onclick="toggleDropdown(this)">
+      booze confidence <i class="care">&#9662;</i></button>
+    <div class="fpanel">
+      <a class="fopt" data-pct=""
+         title="show every event, including ones the booze scorer isn't confident about">any</a>
+      {% for pct in [50, 65, 80] %}
+        <a class="fopt" data-pct="{{ pct }}"
+           title="hide events the booze scorer rates below {{ pct }}%">&ge; {{ pct }}%</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if tag_counts %}
+  <div class="fdrop" data-kind="tags">
+    <button type="button" class="fbtn" onclick="toggleDropdown(this)">
+      tags <i class="care">&#9662;</i></button>
+    <div class="fpanel scroll">
+      {% for t in tag_counts %}
+        <label class="fopt"><input type="checkbox" data-tag="{{ t.tag }}"
+               onchange="toggleTag('{{ t.tag }}')"> {{ t.tag }}<i>{{ t.n }}</i></label>
+      {% endfor %}
+      <a class="fclear" data-clear="tags">clear all</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if source_counts and source_counts | length > 1 %}
+  <div class="fdrop" data-kind="sources">
+    <button type="button" class="fbtn" onclick="toggleDropdown(this)">
+      sources <i class="care">&#9662;</i></button>
+    <div class="fpanel">
+      {% for s in source_counts %}
+        <label class="fopt"><input type="checkbox" data-source="{{ s.source }}"
+               onchange="toggleSource('{{ s.source }}')"> {{ s.source }}<i>{{ s.n }}</i></label>
+      {% endfor %}
+      <a class="fclear" data-clear="sources">clear all</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if price_counts and (price_counts.free or price_counts.paid) %}
+  <div class="fdrop" data-kind="price">
+    <button type="button" class="fbtn" onclick="toggleDropdown(this)">
+      price <i class="care">&#9662;</i></button>
+    <div class="fpanel">
+      {% if price_counts.free %}
+        <a class="fopt" data-price="free">free<i>{{ price_counts.free }}</i></a>
+      {% endif %}
+      {% if price_counts.paid %}
+        <a class="fopt" data-price="paid">paid<i>{{ price_counts.paid }}</i></a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+<script>
+  const FILTERS = {{ active_filters | tojson }};
+
+  function toggleDropdown(btn) {
+    const panel = btn.nextElementSibling;
+    const isOpen = panel.classList.contains("open");
+    document.querySelectorAll(".fpanel.open").forEach(p => p.classList.remove("open"));
+    document.querySelectorAll(".fbtn.open").forEach(b => b.classList.remove("open"));
+    if (!isOpen) { panel.classList.add("open"); btn.classList.add("open"); }
+  }
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".fdrop")) {
+      document.querySelectorAll(".fpanel.open").forEach(p => p.classList.remove("open"));
+      document.querySelectorAll(".fbtn.open").forEach(b => b.classList.remove("open"));
+    }
+  });
+
+  function buildQuery() {
+    const parts = ["f=1"];
+    if (FILTERS.tags && FILTERS.tags.length) parts.push("tags=" + encodeURIComponent(FILTERS.tags.join(",")));
+    if (FILTERS.sources && FILTERS.sources.length) parts.push("sources=" + encodeURIComponent(FILTERS.sources.join(",")));
+    if (FILTERS.price) parts.push("price=" + encodeURIComponent(FILTERS.price));
+    if (FILTERS.max_mi != null) parts.push("max_mi=" + encodeURIComponent(FILTERS.max_mi));
+    if (FILTERS.min_booze != null) parts.push("min_booze=" + encodeURIComponent(FILTERS.min_booze));
+    return parts.join("&");
+  }
+
+  let _saveTimer = null;
+  function saveDefaults() {
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => {
+      fetch("/settings/filters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(FILTERS),
+      });
+    }, 500);
+  }
+
+  async function applyFilters() {
+    const qs = buildQuery();
+    history.pushState(null, "", location.pathname + "?" + qs);
+    if (typeof window.applyPageUpdate === "function") {
+      await window.applyPageUpdate(qs);
+    } else {
+      const main = document.getElementById("page-main");
+      if (main) {
+        main.style.opacity = 0.5;
+        try {
+          const res = await fetch(location.pathname + "?" + qs + "&partial=1");
+          main.innerHTML = await res.text();
+        } finally {
+          main.style.opacity = 1;
+        }
+      }
+    }
+    updateFilterbarUI();
+    saveDefaults();
+  }
+
+  function updateFilterbarUI() {
+    // distance
+    const distDrop = document.querySelector('.fdrop[data-kind="distance"]');
+    if (distDrop) {
+      const btn = distDrop.querySelector(".fbtn");
+      btn.classList.toggle("active", FILTERS.max_mi != null);
+      btn.innerHTML = "distance" + (FILTERS.max_mi != null ? ` &middot; &le;${FILTERS.max_mi}mi` : "") + ' <i class="care">&#9662;</i>';
+      distDrop.querySelectorAll(".fopt").forEach(o => {
+        const mi = o.getAttribute("data-mi");
+        const val = mi === "" ? null : Number(mi);
+        o.classList.toggle("on", val === FILTERS.max_mi);
+      });
+    }
+    // booze
+    const boozeDrop = document.querySelector('.fdrop[data-kind="booze"]');
+    if (boozeDrop) {
+      const btn = boozeDrop.querySelector(".fbtn");
+      btn.classList.toggle("active", FILTERS.min_booze != null);
+      btn.innerHTML = "booze confidence" + (FILTERS.min_booze != null ? ` &middot; &ge;${Math.round(FILTERS.min_booze * 100)}%` : "") + ' <i class="care">&#9662;</i>';
+      boozeDrop.querySelectorAll(".fopt").forEach(o => {
+        const pct = o.getAttribute("data-pct");
+        const val = pct === "" ? null : Number(pct) / 100;
+        o.classList.toggle("on", val === FILTERS.min_booze);
+      });
+    }
+    // tags
+    const tagDrop = document.querySelector('.fdrop[data-kind="tags"]');
+    if (tagDrop) {
+      const btn = tagDrop.querySelector(".fbtn");
+      const n = (FILTERS.tags || []).length;
+      btn.classList.toggle("active", n > 0);
+      btn.innerHTML = "tags" + (n ? ` &middot; ${n}` : "") + ' <i class="care">&#9662;</i>';
+      tagDrop.querySelectorAll("input[data-tag]").forEach(cb => {
+        cb.checked = (FILTERS.tags || []).includes(cb.getAttribute("data-tag"));
+      });
+    }
+    // sources
+    const srcDrop = document.querySelector('.fdrop[data-kind="sources"]');
+    if (srcDrop) {
+      const btn = srcDrop.querySelector(".fbtn");
+      const n = (FILTERS.sources || []).length;
+      btn.classList.toggle("active", n > 0);
+      btn.innerHTML = "sources" + (n ? ` &middot; ${n}` : "") + ' <i class="care">&#9662;</i>';
+      srcDrop.querySelectorAll("input[data-source]").forEach(cb => {
+        cb.checked = (FILTERS.sources || []).includes(cb.getAttribute("data-source"));
+      });
+    }
+    // price
+    const priceDrop = document.querySelector('.fdrop[data-kind="price"]');
+    if (priceDrop) {
+      const btn = priceDrop.querySelector(".fbtn");
+      btn.classList.toggle("active", !!FILTERS.price);
+      btn.innerHTML = "price" + (FILTERS.price ? ` &middot; ${FILTERS.price}` : "") + ' <i class="care">&#9662;</i>';
+      priceDrop.querySelectorAll(".fopt").forEach(o => {
+        o.classList.toggle("on", o.getAttribute("data-price") === FILTERS.price);
+      });
+    }
+  }
+
+  function toggleTag(tag) {
+    FILTERS.tags = FILTERS.tags || [];
+    const i = FILTERS.tags.indexOf(tag);
+    if (i === -1) FILTERS.tags.push(tag); else FILTERS.tags.splice(i, 1);
+    applyFilters();
+  }
+  function toggleSource(source) {
+    FILTERS.sources = FILTERS.sources || [];
+    const i = FILTERS.sources.indexOf(source);
+    if (i === -1) FILTERS.sources.push(source); else FILTERS.sources.splice(i, 1);
+    applyFilters();
+  }
+  function togglePrice(value) {
+    FILTERS.price = FILTERS.price === value ? null : value;
+    applyFilters();
+  }
+  function setMaxMi(mi) {
+    FILTERS.max_mi = mi;
+    applyFilters();
+  }
+  function setMinBooze(v) {
+    FILTERS.min_booze = v;
+    applyFilters();
+  }
+  function clearTags() {
+    FILTERS.tags = [];
+    applyFilters();
+  }
+  function clearSources() {
+    FILTERS.sources = [];
+    applyFilters();
+  }
+
+  document.querySelectorAll('.fdrop[data-kind="distance"] .fopt').forEach(o => {
+    o.addEventListener("click", () => {
+      const mi = o.getAttribute("data-mi");
+      setMaxMi(mi === "" ? null : Number(mi));
+    });
+  });
+  document.querySelectorAll('.fdrop[data-kind="booze"] .fopt').forEach(o => {
+    o.addEventListener("click", () => {
+      const pct = o.getAttribute("data-pct");
+      setMinBooze(pct === "" ? null : Number(pct) / 100);
+    });
+  });
+  document.querySelectorAll('.fdrop[data-kind="price"] .fopt').forEach(o => {
+    o.addEventListener("click", () => togglePrice(o.getAttribute("data-price")));
+  });
+  document.querySelectorAll('.fclear[data-clear="tags"]').forEach(a => a.addEventListener("click", clearTags));
+  document.querySelectorAll('.fclear[data-clear="sources"]').forEach(a => a.addEventListener("click", clearSources));
+
+  updateFilterbarUI();
+
+  window.addEventListener("popstate", () => location.reload());
+</script>

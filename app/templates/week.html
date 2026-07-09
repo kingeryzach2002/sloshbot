@@ -7,7 +7,7 @@
 <title>sloshbot</title>
 {% include "_theme.html" %}
 <style>
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 20px 80px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
   .sub { color: var(--faint); margin: 0 0 22px; font-size: 12px; }
   h2.day { font-family: var(--serif); font-style: italic; font-weight: 600;
            font-size: 18px; color: var(--text); letter-spacing: 0;
@@ -35,89 +35,28 @@
     </nav>
   </header>
 
-  {% set back = '/week' %}
-  <div class="layout">
-  {% include "_sidebar.html" %}
-  <div class="main">
-  <p class="sub">{{ n_confident }} confident pick{{ '' if n_confident == 1 else 's' }} in the next 7 days</p>
+  {% include "_filterbar.html" %}
 
-  {% if not days %}
-    {% if warming_up %}
-      <div class="empty"><div class="coupe pouring"><i></i></div>
-        Pouring your first round — fetching events now.<br>
-        <small>This page refreshes itself in a moment.</small></div>
-    {% elif included_tags or max_mi or min_booze %}
-      <div class="empty"><div class="coupe"></div>Nothing matches your filters.<br>
-        <small>Loosen them to see more.</small></div>
-    {% else %}
-      <div class="empty"><div class="coupe"></div>Nothing on the radar.<br>
-        <small>Check back soon — new events land a few times a day.</small></div>
-    {% endif %}
-  {% endif %}
-
-  {% for day, events in days %}
-    <h2 class="day">{% if day == 'Tonight' %}<span class="pulse"></span>{% endif %}{%
-      if '·' in day %}{{ day.split('·')[0] }}<span class="d">·{{ day.split('·')[1] }}</span>{% else %}{{ day }}{% endif %}</h2>
-    {% set confident = events | selectattr('tier', 'equalto', 'confident') | list %}
-    {% set maybe = events | rejectattr('tier', 'equalto', 'confident') | list %}
-    {% for e in confident %}{% include "_card.html" %}{% endfor %}
-    {% if maybe %}
-      <details class="maybe-section" {{ 'open' if not confident else '' }}>
-        <summary>{{ maybe | length }} more, lower confidence</summary>
-        {% for e in maybe %}{% include "_card.html" %}{% endfor %}
-      </details>
-    {% endif %}
-  {% endfor %}
+  <div id="page-main">{% include "_main_week.html" %}</div>
 
   <details class="explain">
     <summary>how scoring works</summary>
     <div class="why">
-      Each event gets two independent scores (0–100), shown as marks on every
-      card (exact numbers under "the numbers"):<br>
-      <b>&#127864; booze</b> — an LLM reads the full event listing and estimates the
-      probability of free drinks, citing its evidence. The five-segment meter
-      is that probability.<br>
-      <b>logistics</b> — starts at 50, then time-of-day, neighborhood, and RSVP
-      friction adjust it (e.g. +25 weeknight sweet spot, −30 waitlisted).<br><br>
-      Event-type preference isn't a score — it's the <b>tags</b> filter in the
-      sidebar. Pick the tags you're interested in and only matching events show
+      Each event gets a <b>&#127864; booze</b> score (0–100), shown as a mark on
+      every card (exact number under "the numbers"): an LLM reads the full
+      event listing and estimates the probability of free drinks, citing its
+      evidence. The five-segment meter is that probability.<br><br>
+      Event-type preference isn't a score — it's the <b>tags</b> filter above.
+      Pick the tags you're interested in and only matching events show
       up (events with no tags at all are never hidden by it).<br><br>
-      The gold ring on each card is the <b>match</b>: the booze↔logistics blend
-      at your slider's balance. A bright, glowing card is a <b>confident</b>
-      pick (≥{{ (scoring_info.confident * 100) | int }}, capped at 3 per week);
-      dimmed cards are <b>maybes</b> (≥{{ (scoring_info.maybe * 100) | int }});
-      anything below is hidden. Thresholds live in <code>scoring/weights.py</code>.
+      The gold ring on each card is the <b>match</b>: the booze score. A bright,
+      glowing card is a <b>confident</b> pick (≥{{ (scoring_info.confident * 100) | int }},
+      capped at 3 per day); dimmed cards are <b>maybes</b>
+      (≥{{ (scoring_info.maybe * 100) | int }}); anything below is hidden.
+      Thresholds live in <code>scoring/weights.py</code>.
     </div>
   </details>
-  </div><!-- /main -->
-  </div><!-- /layout -->
 </div>
-<script>
-  const FB_PAIRS = { went: "skipped", skipped: "went",
-                     as_promised: "not_as_promised", not_as_promised: "as_promised" };
-  async function fb(btn, eventId, verdict, lens) {
-    const res = await fetch(`/feedback/${eventId}/${verdict}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
-    const { state } = await res.json();
-    btn.classList.toggle("done", state === "on");
-    if (state === "on") {
-      const other = btn.parentElement.querySelector(`[data-verdict="${FB_PAIRS[verdict]}"]`);
-      if (other) other.classList.remove("done");
-    }
-  }
-  async function toggleTag(tag) {
-    await fetch(`/settings/tags/toggle?tag=${encodeURIComponent(tag)}`, { method: "POST" });
-    location.reload();
-  }
-  async function clearFilters(back) {
-    await fetch("/settings/tags/clear", { method: "POST" });
-    location.href = back;  // back has no query string, so max_mi drops too
-  }
-  async function hold(btn, eventId, gcal, lens) {
-    fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
-    window.open(gcal, "_blank");
-    btn.classList.add("done");
-    btn.textContent = "held \u2713";
-  }
-</script>
+{% include "_feedback.html" %}
 </body>
 </html>

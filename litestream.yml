@@ -1,0 +1,27 @@
+# Litestream config: continuous offsite backup of the sloshbot database.
+#
+# What this does: while the app is running, Litestream watches the sloshbot
+# DB and streams every change to an S3-compatible bucket (e.g. Cloudflare
+# R2) within seconds. If the server's disk is ever lost, the database can be
+# restored from that bucket instead of starting over.
+#
+# This file only takes effect once the four LITESTREAM_* variables below
+# are set (via the hosting dashboard, or OpenHost's secrets.env — see
+# start.sh). Until then, start.sh never invokes Litestream at all, so this
+# file is inert — nothing reads it and nothing changes about how the app runs.
+#
+# ${VAR} below is filled in by Litestream from the container's environment
+# at startup; nothing here is a secret by itself. SLOSHBOT_DB itself is
+# always exported by start.sh before Litestream runs (it resolves the same
+# precedence db.py uses: explicit SLOSHBOT_DB, else OPENHOST_APP_DATA_DIR,
+# else the Railway-style /data volume default), so this one concrete path
+# works across host shapes.
+dbs:
+  - path: ${SLOSHBOT_DB}
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: sloshbot
+      endpoint: ${LITESTREAM_ENDPOINT}
+      access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+      secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}

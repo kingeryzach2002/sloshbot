@@ -27,7 +27,6 @@ def main():
                     help="comma-separated subset of: " + ", ".join(SCORERS))
     ap.add_argument("--rescore", action="store_true",
                     help="recompute even if a cached score exists")
-    ap.add_argument("--include-dummy", action="store_true")
     args = ap.parse_args()
 
     init_db()
@@ -36,8 +35,6 @@ def main():
     with get_conn() as conn:
         events = [dict(r) for r in conn.execute(
             "SELECT * FROM events WHERE starts_at >= ? ORDER BY starts_at", (now,))]
-    if not args.include_dummy:
-        events = [e for e in events if e["source"] != "dummy"]
 
     names = [n.strip() for n in args.scorer.split(",") if n.strip() in SCORERS]
     with get_conn() as conn:

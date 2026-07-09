@@ -1,0 +1,22 @@
+{# Shared feedback/hold JS — went/skipped/booze-promise toggle buttons and the
+   "+ hold on calendar" button, used by every view that renders _card.html or
+   the debrief banner. FB_PAIRS is injected from app/main.py's FEEDBACK_PAIRS
+   (the single source of truth) so the two can't drift. #}
+<script>
+  const FB_PAIRS = {{ feedback_pairs | tojson }};
+  async function fb(btn, eventId, verdict, lens) {
+    const res = await fetch(`/feedback/${eventId}/${verdict}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
+    const { state } = await res.json();
+    btn.classList.toggle("done", state === "on");
+    if (state === "on") {
+      const other = btn.parentElement.querySelector(`[data-verdict="${FB_PAIRS[verdict]}"]`);
+      if (other) other.classList.remove("done");
+    }
+  }
+  async function hold(btn, eventId, gcal, lens) {
+    fetch(`/hold/${eventId}?lens=${encodeURIComponent(lens)}`, { method: "POST" });
+    window.open(gcal, "_blank");
+    btn.classList.add("done");
+    btn.textContent = "held ✓";
+  }
+</script>

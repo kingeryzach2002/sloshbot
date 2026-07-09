@@ -1,3 +1,4 @@
+{% import "_meter.html" as m %}
 <div class="card {{ e.tier }}">
   <div class="row1">
     <span class="title"><a href="{{ e.url }}" target="_blank">{{ e.title }}</a></span>
@@ -6,6 +7,8 @@
   </div>
   <div class="meta">
     {{ e.start_dt.strftime("%-I:%M %p") }}
+    {% if e.is_free == 1 %} · <span class="price free">free</span>
+    {% elif e.is_free == 0 %} · <span class="price paid">paid</span>{% endif %}
     · {{ e.venue_name or "venue TBA" }}{% if e.neighborhood %} ({{ e.neighborhood }}){% endif %}
     {% if e.host_name %} · by {{ e.host_name }}{% endif %}
     {% if e.rsvp_type and e.rsvp_type != 'open' %} · <span class="rsvp">{{ e.rsvp_type }}</span>{% endif %}
@@ -18,21 +21,20 @@
       onclick="toggleTag('{{ t }}')" title="filter to this tag">{{ t }}</span>{% endfor %}</div>
   {% endif %}
   {% if e.scores.booze is defined %}
-    <div class="whyline"><span class="meter" title="booze {{ (e.scores.booze * 100) | round | int }}%">&#127864;&nbsp;{% for i in range(5) %}<i class="{{ 'on' if e.scores.booze * 5 >= i + 0.5 }}"></i>{% endfor %}</span>
+    <div class="whyline">{{ m.meter('booze', e.scores.booze) }}
       &nbsp;{{ e.rationales.booze }}</div>
   {% endif %}
   {% if e.rationales %}
     <details class="why-more">
       <summary>the numbers</summary>
       <div class="why">
-        <b>match {{ (e.composite * 100) | round | int }}</b> — weighted blend of:<br>
+        <b>match {{ (e.composite * 100) | round | int }}</b><br>
         {% if e.rationales.booze %}<b>&#127864; booze {{ (e.scores.booze * 100) | round | int }}%</b> — {{ e.rationales.booze }}{% endif %}
-        {% if e.rationales.logistics %}<br><b>logistics {{ (e.scores.logistics * 100) | round | int }}%</b> — {{ e.rationales.logistics }}{% endif %}
       </div>
     </details>
   {% endif %}
   <div class="actions">
-    <button class="btn primary" onclick="hold(this, '{{ e.id }}', '{{ e.gcal }}', '{{ lens | default('booze') }}')">+ hold on calendar</button>
+    <button class="btn primary" onclick="hold(this, '{{ e.id }}', '{{ e.gcal }}', '{{ lens | default(default_lens) }}')">+ hold on calendar</button>
   </div>
   <div class="fbrow">
     <span class="fbq">did you go?</span>
@@ -42,8 +44,8 @@
             onclick="fb(this, '{{ e.id }}', 'skipped', '')">skipped</button>
     <span class="fbq">&#127864; booze?</span>
     <button class="btn sm {{ 'done' if 'as_promised' in e.feedback }}" data-verdict="as_promised"
-            onclick="fb(this, '{{ e.id }}', 'as_promised', 'booze')">as promised</button>
+            onclick="fb(this, '{{ e.id }}', 'as_promised', 'booze')">yes</button>
     <button class="btn sm miss {{ 'done' if 'not_as_promised' in e.feedback }}" data-verdict="not_as_promised"
-            onclick="fb(this, '{{ e.id }}', 'not_as_promised', 'booze')">a lie</button>
+            onclick="fb(this, '{{ e.id }}', 'not_as_promised', 'booze')">no</button>
   </div>
 </div>

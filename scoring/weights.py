@@ -5,38 +5,33 @@ weighted average is computed over whichever scores an event actually has.
 """
 
 WEIGHTS = {
-    "booze": 0.70,
-    "logistics": 0.30,
+    "booze": 1.0,
 }
 
-# With two scorers there is exactly one honest knob: the booze↔logistics
-# balance slider in the sidebar (settings key "weight_booze"; logistics gets
-# the remainder). Named presets are gone — they were personality, not signal.
 # Event-type preference isn't a weight at all: it's the tag filter (settings
 # key "included_tags"), a hard filter applied in load_events.
 
 # Perk lenses: the user-facing "what are we hunting" scorers. A future perk
 # scorer (food, live music, ...) becomes a lens by adding its scorer key here.
 LENSES = ["booze"]
-LENS_BOOST = 0.60  # the active lens's share of the blend when ranking
+
+# Per-lens display metadata — the single home for how a lens is rendered, so a
+# new lens is a config entry here (+ its scorer) rather than copy-pasted markup.
+# emoji_html is the HTML entity so templates can emit it verbatim with |safe.
+LENS_META = {
+    "booze": {"label": "booze", "emoji_html": "&#127864;"},  # 🍸
+}
 
 TIER_CONFIDENT = 0.65  # >= this -> "confident"
 TIER_MAYBE = 0.40      # >= this -> "maybe"; below -> hidden
 
 MAX_PICKS = 3  # hard cap on top-tier events per day — scarcity is the product
 
-
-def lens_weights(lens: str, base: dict[str, float] | None = None) -> dict[str, float]:
-    """Blend weights with the active lens boosted to LENS_BOOST; the rest of the
-    base weights share what's left, proportionally."""
-    base = base or WEIGHTS
-    if lens not in base:
-        return base
-    others = {k: v for k, v in base.items() if k != lens}
-    total = sum(others.values()) or 1.0
-    w = {k: (1 - LENS_BOOST) * v / total for k, v in others.items()}
-    w[lens] = LENS_BOOST
-    return w
+# Nightlife-listing sources (RA, 19hz) are structurally paid-cover / cash-bar
+# club nights, not free-booze mixers — a high booze score there is much more
+# likely to be a scorer false-positive than genuine sponsorship. Never let
+# them compete for a "confident" slot; they can still surface as "maybe".
+NEVER_CONFIDENT_SOURCES = {"ra", "19hz"}
 
 
 def composite(scores: dict[str, float], weights: dict[str, float] | None = None) -> float:

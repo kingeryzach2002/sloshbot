@@ -1,0 +1,7 @@
+{# The five-segment perk meter, rendered from lens metadata (scoring.weights
+   LENS_META, exposed as the `lens_meta` template global) rather than hardcoded
+   per lens. One home for the emoji/label so a new lens is a config entry, not
+   copy-pasted markup. Call: {{ m.meter('booze', e.scores.booze) }} #}
+{% macro meter(lens, score) -%}
+<span class="meter" title="{{ lens_meta[lens].label }} {{ (score * 100) | round | int }}%">{{ lens_meta[lens].emoji_html | safe }}&nbsp;{% for i in range(5) %}<i class="{{ 'on' if score * 5 >= i + 0.5 }}"></i>{% endfor %}</span>
+{%- endmacro %}

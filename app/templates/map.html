@@ -9,16 +9,15 @@
 {% include "_theme.html" %}
 <style>
   body { display: flex; flex-direction: column; height: 100vh; }
-  .bar { display: flex; align-items: center; gap: 14px; padding: 12px 16px;
-         flex-wrap: wrap; border-bottom: 1px solid var(--line); }
-  form.home { display: flex; gap: 6px; margin-left: auto; }
+  /* sit above Leaflet's map panes/controls so open filter dropdowns aren't clipped by the map */
+  .topwrap { padding: 16px 20px 0; position: relative; z-index: 1100; }
+  header { margin-bottom: 14px; }
+  .barrow { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+  .barrow .filterbar { flex: 1; margin-bottom: 0; }
+  form.home { display: flex; gap: 6px; }
   input[type=text] { background: var(--card2); border: 1px solid var(--line); color: var(--text);
-          border-radius: 8px; padding: 5px 10px; font-size: 13px; width: 260px; }
-  select { background: var(--card2); border: 1px solid var(--line); color: var(--text);
-           border-radius: 8px; padding: 5px 8px; font-size: 13px; }
-  button { background: var(--gold); border: none; color: var(--bg); font-weight: 650;
-           border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
-  .note { color: var(--muted); font-size: 12px; padding: 4px 16px; }
+          border-radius: 9px; padding: 6px 11px; font-size: 13px; width: 240px; }
+  .note { color: var(--muted); font-size: 12px; padding: 8px 0 0; }
   #map { flex: 1; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--card); color: var(--text); }
   .pop b { font-size: 14px; }
@@ -27,29 +26,28 @@
 </style>
 </head>
 <body>
-<div class="bar">
-  <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
-  <nav>
-    <a href="/">Tonight</a>
-    <a href="/week">This week</a>
-    <a href="/calendar">Calendar</a>
-    <a href="/map" class="active">Map</a>
-  </nav>
-  <select onchange="location.href='/map' + (this.value ? '?max_mi=' + this.value : '')">
-    <option value="">any distance</option>
-    {% for mi in [1, 2, 3, 5] %}
-      <option value="{{ mi }}" {{ 'selected' if max_mi == mi else '' }}>within {{ mi }} mi</option>
-    {% endfor %}
-  </select>
-  <form class="home" method="post" action="/settings/home">
-    <input type="text" name="home_address" placeholder="home address (for distances)"
-           value="{{ home_address }}">
-    <button type="submit">{{ 'Update home' if home_address else 'Set home' }}</button>
-  </form>
+<div class="topwrap">
+  <header>
+    <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
+    <nav>
+      <a href="/">Tonight</a>
+      <a href="/week">This week</a>
+      <a href="/calendar">Calendar</a>
+      <a href="/map" class="active">Map</a>
+    </nav>
+  </header>
+
+  <div class="barrow">
+    {% include "_filterbar.html" %}
+    <form class="home" method="post" action="/settings/home">
+      <input type="text" name="home_address" placeholder="home address (for distances)"
+             value="{{ home_address }}">
+      <button class="btn primary" type="submit">{{ 'Update home' if home_address else 'Set home' }}</button>
+    </form>
+  </div>
+  {% if n_unmapped %}<div class="note">{{ n_unmapped }} event(s) have no location and aren't shown —
+    run <code>uv run python -m ingest.geocode</code> to backfill.</div>{% endif %}
 </div>
-{% if n_unmapped %}<div class="note">{{ n_unmapped }} event(s) have no location and aren't shown —
-  run <code>uv run python -m ingest.geocode</code> to backfill.</div>{% endif %}
-{% if not home and max_mi %}<div class="note">Distance filter needs a home address set first.</div>{% endif %}
 <div id="map"></div>
 
 <script>
@@ -65,16 +63,49 @@
     ? { radius: 9, color: "#e8b34b", fillColor: "#e8b34b", fillOpacity: 0.85, weight: 2 }
     : { radius: 6, color: "#a39a8e", fillColor: "#6b6258", fillOpacity: 0.6, weight: 1 };
 
-  for (const p of pins) {
-    L.circleMarker([p.lat, p.lon], style(p.tier)).addTo(map).bindPopup(`
-      <div class="pop">
-        <b>${p.title}</b><br>
-        <span class="m">${p.when} · ${p.venue}${p.distance !== null ? ` · ${p.distance} mi from home` : ""}</span><br>
-        <span class="m">🍸 ${p.booze}% free-booze likelihood</span><br>
-        <a href="${p.url}" target="_blank">event page</a> ·
-        <a href="${p.gcal}" target="_blank">+ hold on calendar</a>
-      </div>`);
+  const pinLayer = L.layerGroup().addTo(map);
+
+  function redrawPins(pinList) {
+    pinLayer.clearLayers();
+    for (const p of pinList) {
+      L.circleMarker([p.lat, p.lon], style(p.tier)).addTo(pinLayer).bindPopup(`
+        <div class="pop">
+          <b>${p.title}</b><br>
+          <span class="m">${p.when} · ${p.venue}${p.distance !== null ? ` · ${p.distance} mi from home` : ""}</span><br>
+          <span class="m">🍸 ${p.booze}% free-booze likelihood</span><br>
+          <a href="${p.url}" target="_blank">event page</a> ·
+          <a href="${p.gcal}" target="_blank">+ hold on calendar</a>
+        </div>`);
+    }
   }
+
+  function fmtWhen(iso) {
+    const d = new Date(iso);
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let h = d.getHours();
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return `${days[d.getDay()]} ${h}:${min} ${ampm}`;
+  }
+
+  function eventToPin(e) {
+    return {
+      lat: e.lat, lon: e.lon, title: e.title, tier: e.tier, url: e.url, gcal: e.gcal,
+      when: fmtWhen(e.start_dt),
+      venue: e.venue_name || "",
+      booze: Math.round((e.scores.booze || 0) * 100),
+      distance: e.distance_mi != null ? Math.round(e.distance_mi * 10) / 10 : null,
+    };
+  }
+
+  window.applyPageUpdate = async (qs) => {
+    const r = await fetch("/api/events?" + qs);
+    const { events } = await r.json();
+    redrawPins(events.filter(e => e.lat != null).map(eventToPin));
+  };
+
+  redrawPins(pins);
 
   if (home) {
     L.marker([home.lat, home.lon]).addTo(map).bindPopup("<b>home</b>");
