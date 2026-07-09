@@ -83,6 +83,18 @@ def run_once(rescore: bool = False) -> bool:
     else:
         _log("scoring: done")
 
+    # Self-heal card blurbs: newly-scored events already carry a blurb (the booze
+    # call returns one), so this only fills upcoming events scored BEFORE blurbs
+    # existed — a cheap no-op once every row is filled. Keeps prod current without
+    # a manual backfill after deploy.
+    _log("blurbs: backfilling any missing card blurbs")
+    result = subprocess.run([sys.executable, "-m", "scoring.backfill_blurbs"])
+    if result.returncode != 0:
+        _log(f"blurbs: FAILED (exit {result.returncode}) — non-fatal")
+        ok = False
+    else:
+        _log("blurbs: done")
+
     pruned = prune_old_events()
     _log(f"prune: removed {pruned} old event(s) with no feedback/hold")
 
