@@ -84,10 +84,24 @@ new one, so there's never two copies writing to the database at once.
 **Where secrets live:** OpenHost has no "Environment Variables" panel like
 Railway — there's no dashboard way to set custom env vars at all. Instead,
 create a file named `secrets.env` inside the app's persistent data folder
-(the same folder the database lives in). The easiest way to create/edit it
-is with the **filestash** file-manager app available on the instance —
-open it, navigate to sloshbot's data folder, and create `secrets.env` as a
-plain text file with one `KEY=value` line per variable. Sloshbot reads this
+(the same folder the database lives in). That folder is
+`/data/app_data/sloshbot/` from inside the container (the value of
+`OPENHOST_APP_DATA_DIR`), and on the host it lives under
+`<persistent_data_dir>/app_data/sloshbot/` — e.g.
+`/home/host/.openhost/local_compute_space/persistent_data/app_data/sloshbot/`.
+It's the same directory that holds `sloshbot.db`.
+
+Two UI ways to create/edit it, whichever your instance exposes:
+- **File Browser** — OpenHost's built-in file-manager app (dufs-based; it
+  appears in your dashboard's app list). Open it, navigate into the
+  `sloshbot` app_data folder — you'll see `sloshbot.db` there — and create or
+  upload `secrets.env`. (Note: it is *not* "filestash"; earlier drafts of
+  this doc named the wrong tool.)
+- **Terminal shell** — if your instance gives you a host shell, `cd` into the
+  path above and create the file with `nano secrets.env` (or upload it and
+  drop it in). Watch for editors silently saving it as `secrets.env.txt`.
+
+Put one `KEY=value` line per variable; no quotes needed. Sloshbot reads the
 file automatically on every boot. Variables you can put in it:
 
 | Variable | What it does |
@@ -110,23 +124,40 @@ visitor identities — e.g. after a suspected leak — delete that line from
 scheduler), OpenHost has no cron/scheduler feature at all, so sloshbot
 defaults the refresh loop to every 4 hours automatically — no setup needed.
 
-**Custom domain via Cloudflare redirect:** OpenHost apps get a URL like
-`https://sloshbot.kingeryzach2002.selfhost.imbue.com/`. If you want your
-own domain (e.g. `events.yourdomain.com`) to point people there, the
-simplest approach is a Cloudflare Redirect Rule rather than a DNS proxy:
+**Custom domain via Cloudflare redirect (this is how the live site is set
+up):** OpenHost apps get a URL like
+`https://sloshbot.kingeryzach2002.selfhost.imbue.com/`. The production domain
+`sloshbot.beer` points there via a **Cloudflare Redirect Rule**, not a DNS
+proxy. A true proxy/CNAME does *not* work on a shared imbue-hosted box: their
+router routes by the `selfhost.imbue.com` hostname and the TLS cert only
+covers that name, so pointing an outside domain straight at it breaks. (Native
+custom-domain support — imbue terminating TLS for your domain so it stays in
+the address bar — was asked for and declined as of this writing; revisit if
+that changes.)
 
-1. In the Cloudflare dashboard for your domain, go to Rules -> Redirect
-   Rules -> Create Rule.
-2. Match: hostname equals `events.yourdomain.com` (or whichever subdomain
-   you want).
-3. Then: Dynamic/Static redirect to
-   `https://sloshbot.kingeryzach2002.selfhost.imbue.com/`, status code
-   **301** (permanent).
-4. Save and deploy the rule.
+The exact working setup, reproducible for any domain on Cloudflare:
 
-Note: this is a redirect, not a proxy, so visitors' browsers will show the
-`selfhost.imbue.com` address in the address bar after landing — there's no
-way to make the OpenHost URL invisible with a simple redirect. If you want
-the custom domain to stay in the address bar, that requires OpenHost to
-support custom domains natively (ask your engineer to check current
-platform support) rather than a Cloudflare redirect.
+1. **DNS** — the hostname must resolve *and* be proxied for a Redirect Rule to
+   fire, but there's no real origin (you're bouncing to imbue). So point it at
+   a throwaway IP and let Cloudflare's edge intercept: DNS -> Records -> Add
+   record -> type **A**, Name `@` (the apex/root), IPv4 **`192.0.2.1`** (a
+   reserved "goes nowhere" address — never actually contacted), Proxy status
+   **Proxied** (orange cloud). For a subdomain instead of the root, use its
+   name (e.g. `events`) as the record Name.
+2. **Redirect Rule** — Rules -> Redirect Rules -> Create Rule (the "Redirect
+   to a different domain" template is the closest starting point):
+   - Match: **Hostname** **equals** `sloshbot.beer` (expression
+     `http.host eq "sloshbot.beer"`).
+   - Then: URL redirect, Type **Dynamic**, Expression
+     `concat("https://sloshbot.kingeryzach2002.selfhost.imbue.com", http.request.uri.path)`,
+     Status code **301**, "Preserve query string" checked. (Dynamic + the
+     `concat` carries the path through so `sloshbot.beer/map` lands on the map;
+     a **Static** redirect to `https://sloshbot.kingeryzach2002.selfhost.imbue.com/`
+     also works but sends every path to the homepage.)
+   - Deploy. Cloudflare auto-issues the TLS cert for the domain within a few
+     minutes.
+
+Note: this is a redirect, not a proxy, so visitors' browsers show the
+`selfhost.imbue.com` address in the bar after landing — that's expected, not a
+bug, and there's no way around it without native custom-domain support (see
+above).

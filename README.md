@@ -1,5 +1,9 @@
 # Sloshbot
 
+**Live at [sloshbot.beer](https://sloshbot.beer)** — hosted on OpenHost, with
+the domain pointed there via a Cloudflare redirect (see
+[README-DEPLOY.md](./README-DEPLOY.md)).
+
 Sloshbot is an SF free-booze event finder. It scrapes events from a handful
 of sources (Luma, Eventbrite, Funcheap, DoTheBay, GarysGuide, Meetup,
 Resident Advisor, 19hz), uses an LLM plus heuristics to score each one on
