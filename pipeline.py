@@ -1,4 +1,5 @@
-"""Unified data-layer refresh: scrape -> dedup -> geocode -> score -> prune.
+"""Unified data-layer refresh: ingest -> dedup -> geocode -> geofilter -> score
+-> blurbs -> prune.
 
 Host-agnostic — invoke once from cron / a systemd timer, or pass --loop to run
 forever with a sleep interval (for a host with no native scheduler). Ingestion
@@ -30,6 +31,11 @@ STEPS = [
     ("ingest", [sys.executable, "-m", "ingest.run"]),
     ("dedup", [sys.executable, "-m", "ingest.dedup"]),
     ("geocode", [sys.executable, "-m", "ingest.geocode"]),
+    # geofilter runs after geocode (needs coordinates) and before scoring, so
+    # we never spend LLM scoring calls on events we're about to drop as
+    # out-of-area. Source-agnostic backstop for feeds that leak non-Bay-Area
+    # events (e.g. Luma's SF place feed); see ingest/geofilter.py.
+    ("geofilter", [sys.executable, "-m", "ingest.geofilter"]),
 ]
 
 

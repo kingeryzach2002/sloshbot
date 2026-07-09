@@ -52,7 +52,22 @@ def _query_for(event) -> str | None:
     addr = event["address"] or event["venue_name"]
     if not addr:
         return None
-    if "san francisco" not in addr.lower() and "ca" not in addr.lower():
+    low = addr.lower()
+    # Only nudge *bare* addresses (a lone venue name or street with no locality,
+    # e.g. "The Chapel" or "901 Market St") toward SF. If the address already
+    # carries a locality — a comma-separated city/state/country, or it names SF
+    # or California outright — trust it as written.
+    #
+    # The old test was a bare `"ca" in addr` substring, which matched "Canada",
+    # "Chicago", "Vatican", etc., so those skipped the nudge (fine) — but the
+    # naive inverse (append whenever SF/CA absent) would tack ", San Francisco,
+    # CA" onto "Vancouver, BC, Canada", mangling a real foreign address toward
+    # SF and hiding it from the geofilter step. Keying off "has a comma-delimited
+    # locality" avoids both failure modes: bare SF venues still get the nudge,
+    # while any address that already states where it is geocodes truthfully so
+    # ingest.geofilter can reject it if it's out of the Bay Area.
+    has_locality = ("," in addr) or ("san francisco" in low) or ("california" in low)
+    if not has_locality:
         addr += ", San Francisco, CA"
     return addr
 

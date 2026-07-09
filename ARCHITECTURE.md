@@ -14,8 +14,8 @@ sloshbot/
 ├── ARCHITECTURE.md      # this file — the contract everything builds against
 ├── sloshbot.db          # SQLite; the ONLY interface between pipeline and app
 ├── pipeline.py          # host-agnostic refresh: ingest -> dedup -> geocode ->
-│                         #   score -> prune. `python -m pipeline` (one-shot) or
-│                         #   `--loop --interval N` for hosts with no native cron
+│                         #   geofilter -> score -> prune. `python -m pipeline`
+│                         #   (one-shot) or `--loop --interval N` (no native cron)
 ├── ingest/
 │   ├── schema.sql       # canonical DDL
 │   ├── sources/         # one module per source (luma, eventbrite, funcheap,
@@ -25,6 +25,8 @@ sloshbot/
 │   ├── dedup.py         # cross-source duplicate detection (sets duplicate_of)
 │   ├── geocode.py       # fills lat/lon from address (cached Nominatim lookups);
 │   │                     #   also backfills home_lat/home_lon for every user
+│   ├── geofilter.py     # drops events with coords >12mi from central SF (out
+│   │                     #   of Bay Area); backstop for feeds that leak non-SF
 │   ├── normalize.py     # RawEvent -> Event (schema below), dedup, upsert
 │   └── run.py           # CLI: python -m ingest.run [--source luma]
 ├── scoring/
@@ -65,7 +67,7 @@ same pipeline feeds both the Jinja views and the JSON API (`Event.to_dict()`),
 so a future client-rendered frontend needs no new backend logic.
 
 Run locally with `uv run uvicorn app.main:app --reload`; refresh data with
-`uv run python -m pipeline` (runs ingest → dedup → geocode → score → prune in
+`uv run python -m pipeline` (runs ingest → dedup → geocode → geofilter → score → prune in
 one shot; `--loop --interval N` keeps it running without native cron, `--rescore`
 forces a full booze rescore instead of unscored-only — expensive, use after a
 scorer prompt/heuristic change). `SLOSHBOT_SECRET_KEY` must be set to a real
@@ -87,7 +89,7 @@ you're interested in.
 
 **Data flow (batch, never live):**
 `pipeline.py` (cron / `--loop` / manual) → ingest each source → dedup → geocode
-→ `scoring.run` (scores unscored events, cached) → prune → SQLite → web app
+→ geofilter (drop out-of-Bay-Area) → `scoring.run` (scores unscored events, cached) → prune → SQLite → web app
 (reads only) → user actions (feedback, calendar holds, settings) write back to
 SQLite, scoped to the visitor's anonymous user_id.
 
