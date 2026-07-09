@@ -365,6 +365,26 @@
               letter-spacing: 0.02em; }
   .day-when b { color: var(--muted); font-weight: 600; }
 
+  /* ---- the ONE knob: distance. No tags/source/free — Tonight stays an
+         opinionated answer, not a browsing surface. Same seg control as
+         the weekly view (its .fb-seg styles live in that page's second
+         style block, restated here since we only extracted the first). ---- */
+  .day-dist { display: flex; align-items: center; gap: 9px; margin: 14px 0 0; }
+  .day-dist-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+              color: var(--faint); white-space: nowrap; }
+  .fb-seg { display: inline-flex; gap: 2px; background: var(--card2);
+            border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
+  .fb-seg button { font: inherit; font-family: var(--mono); font-size: 11.5px;
+            font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer;
+            background: none; border: none; border-radius: 8px; padding: 4px 8px;
+            transition: color .18s, background .3s var(--ease),
+                        transform .12s var(--ease); }
+  .fb-seg button i { font-style: normal; }
+  .fb-seg button:hover { color: var(--text); }
+  .fb-seg button:active { transform: scale(0.96); }
+  .fb-seg button[aria-current="true"] { background: var(--gold); color: var(--bg); }
+  .fb-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
   /* ---- hero: the one place the system is allowed to be loud ---- */
   .hero-kicker { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; }
   .hero-kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold);
@@ -389,15 +409,11 @@
   .hero-card .ta-foot { margin-top: 20px; }
   .hero-card .ta-stamp-row { margin-top: 16px; padding-top: 14px; }
 
-  /* ---- section labels: wry bartender, quiet ---- */
-  .day-section { margin: 0 0 14px; padding-top: 6px; border-top: 1px solid var(--line2); }
-  .day-section .lbl { font-family: var(--serif); font-style: normal; font-weight: 600;
-              font-size: 15.5px; color: var(--text); }
-  .day-section .cnt { font-size: 11.5px; color: var(--faint); margin-left: 8px;
-              font-variant-numeric: oldstyle-nums; }
   .stack { display: grid; gap: 18px; }
   .stack > .ta-card { min-width: 0; max-width: 100%; }
 
+  /* ---- disclosures: both "also pouring" and "less sure" are collapsed
+         on load and expand on click (details/summary, wry summary line) ---- */
   .more { margin-top: 16px; }
   .more[open] > summary { margin-bottom: 8px; }
   .more .stack { padding-top: 2px; }
@@ -428,6 +444,16 @@
     <div class="day-head">
       <p class="day-mark"><em>slosh<span class="tip">bot</span></em></p>
       <p class="day-when" id="dayWhen">tonight &middot; &hellip;</p>
+      <div class="day-dist">
+        <span class="day-dist-lbl">within</span>
+        <div class="fb-seg" id="distSeg" role="group" aria-label="distance cap">
+          <button type="button" data-mi="" aria-current="true">any</button>
+          <button type="button" data-mi="1">1<i>mi</i></button>
+          <button type="button" data-mi="2">2<i>mi</i></button>
+          <button type="button" data-mi="3">3<i>mi</i></button>
+          <button type="button" data-mi="5">5<i>mi</i></button>
+        </div>
+      </div>
     </div>
 
     <div id="dayRoot"></div>
@@ -440,6 +466,18 @@
   // home: settings.home_lat/home_lon (lat 37.770518, lon -122.4451024)
   const EVENTS = JSON.parse(document.getElementById("events-data").textContent);
   const THRESH = 65; // the booze threshold gate, fixed for this draft (no slider on Tonight)
+
+  // the ONE knob on Tonight: distance cap (null = no cap). Distance is a
+  // filter, never a score — it only narrows the set the ranking runs over.
+  const state = { maxMi: null };
+
+  // distance is the only predicate. Null distance always PASSES (unknown
+  // location is never dropped — matches the weekly view / app behavior).
+  function passesDistance(e) {
+    if (state.maxMi === null) return true;
+    if (e.distance_mi === null || e.distance_mi === undefined) return true;
+    return e.distance_mi <= state.maxMi;
+  }
 
   // ---- helpers (ported from design_real.html's real-data build) ----
   function cleanVenue(name) {
@@ -550,31 +588,38 @@
   function render() {
     const root = document.getElementById("dayRoot");
     const when = document.getElementById("dayWhen");
-    if (!EVENTS.length) {
-      when.innerHTML = "tonight";
+
+    // filter first, THEN rank — so a tightened cap can change the hero.
+    const pool = EVENTS.filter(passesDistance);
+
+    if (!pool.length) {
+      // preserve the dateline if we know it; the count is now zero.
+      const anchor = EVENTS[0];
+      when.innerHTML = anchor
+        ? `${fmtDow(anchor.starts_at)}, <b>${fmtDate(anchor.starts_at)}</b> &middot; 0 on tap`
+        : "tonight";
       root.innerHTML = `<div class="fb-empty">
         <div class="coupe dim" style="--p:0">
           <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
         </div>
-        nothing worth pouring above ${THRESH}% tonight
-        <small>ease up on the pour, or check back tomorrow.</small>
+        nothing worth pouring within that radius tonight
+        <small>widen the radius, or check back tomorrow.</small>
       </div>`;
       return;
     }
 
-    const sorted = [...EVENTS].sort((a, b) => b.booze - a.booze);
+    const sorted = [...pool].sort((a, b) => b.booze - a.booze);
     const hero = sorted[0];
     const rest = sorted.slice(1);
     const shown = rest.filter(e => e.booze >= THRESH);
     const low = rest.filter(e => e.booze < THRESH);
 
-    when.innerHTML = `${fmtDow(hero.starts_at)}, <b>${fmtDate(hero.starts_at)}</b> &middot; ${EVENTS.length} on tap`;
+    when.innerHTML = `${fmtDow(hero.starts_at)}, <b>${fmtDate(hero.starts_at)}</b> &middot; ${pool.length} on tap`;
 
     let html = heroHtml(hero);
 
     if (shown.length) {
-      html += `<section class="day-section"><span class="lbl">also pouring tonight</span><span class="cnt">${shown.length}</span></section>
-      <div class="stack">${shown.map(cardHtml).join("")}</div>`;
+      html += `<details class="more also"><summary>${shown.length} also pouring tonight</summary><div class="stack">${shown.map(cardHtml).join("")}</div></details>`;
     }
 
     if (low.length) {
@@ -600,6 +645,18 @@
     if (ev.target.closest("a, button")) return;   // title link, stamps, hold
     const card = ev.target.closest(".ta-card");
     if (card) card.classList.toggle("open");
+  });
+
+  // ---- distance stepper (the only knob) — sets the cap and re-pours ----
+  const distSeg = document.getElementById("distSeg");
+  distSeg.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
+      btn.setAttribute("aria-current", "true");
+      const mi = btn.dataset.mi;
+      state.maxMi = mi === "" ? null : parseFloat(mi);
+      render();
+    });
   });
 
   render();

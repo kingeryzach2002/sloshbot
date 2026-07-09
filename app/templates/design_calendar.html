@@ -397,6 +397,53 @@
   .cal-thresh .thresh-read { font-variant-numeric: tabular-nums; color: var(--gold);
                               font-size: 13px; font-weight: 600; width: 32px; text-align: right; }
 
+  /* ---- filter controls (ported verbatim from design_real.html's
+     filter bar: same seg material, same popover chips, same states) ---- */
+  .fb-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.11em;
+            color: var(--faint); white-space: nowrap; }
+  .fb-filters { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; flex: none; }
+
+  /* distance stepper — FLAT controls in the seg material */
+  .fb-seg { display: inline-flex; gap: 2px; background: var(--card2);
+            border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
+  .fb-seg button { font: inherit; font-family: var(--mono); font-size: 11.5px;
+            font-variant-numeric: tabular-nums; color: var(--muted); cursor: pointer;
+            background: none; border: none; border-radius: 8px; padding: 4px 7px;
+            transition: color .18s, background .3s var(--ease), transform .12s var(--ease); }
+  .fb-seg button i { font-style: normal; }
+  .fb-seg button:hover { color: var(--text); }
+  .fb-seg button:active { transform: scale(0.96); }
+  .fb-seg button[aria-current="true"] { background: var(--gold); color: var(--bg); }
+  .fb-seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* chip popovers (tags, source) — triggers are FLAT */
+  .fb-pop { position: relative; flex: none; }
+  .fb-pop-btn { font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); background: none;
+              border: 1px solid var(--line2); border-radius: 4px; padding: 5px 9px;
+              cursor: pointer; white-space: nowrap;
+              transition: color .15s, border-color .15s, transform .12s var(--ease); }
+  .fb-pop-btn:hover { color: var(--text); border-color: var(--gold-dim); }
+  .fb-pop-btn:active { transform: scale(0.96); }
+  .fb-pop-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-pop-btn.active { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+              min-width: 200px; max-width: 260px;
+              background-color: var(--card2); background-image: var(--grain);
+              border: 1px solid var(--line2); border-radius: 16px; padding: 10px;
+              box-shadow: var(--elev-pop);
+              display: none; flex-wrap: wrap; gap: 6px; }
+  .fb-panel.open { display: flex; }
+  .fb-chip { font-size: 11px; color: var(--muted); background: var(--card);
+             border: 1px solid var(--line2); border-radius: 99px; padding: 4px 10px;
+             cursor: pointer; transition: color .15s, border-color .15s, transform .12s var(--ease); }
+  .fb-chip:hover { color: var(--text); }
+  .fb-chip:active { transform: scale(0.96); }
+  .fb-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .fb-chip .n { color: var(--faint); margin-left: 4px; }
+  .fb-chip.on { color: var(--gold); border-color: var(--gold-dim); }
+  .fb-chip.on .n { color: var(--gold-dim); }
+
   /* ---- the grid ---- */
   :root { --hour-h: 52px; --gutter-w: 54px; }
   .cal { position: relative; display: grid; grid-template-columns: var(--gutter-w) repeat(7, 1fr);
@@ -413,7 +460,11 @@
                     color: var(--muted); margin-top: 1px; font-variant-numeric: oldstyle-nums; }
   .cal-head.today { background-color: rgba(208,160,74,0.07); }
   .cal-head.today .dow, .cal-head.today .num { color: var(--gold); }
+  .cal-head .cnt { display: block; font-size: 9px; color: var(--faint); margin-top: 2px;
+                   letter-spacing: 0.02em; font-variant-numeric: oldstyle-nums; }
+  .cal-head.empty .dow, .cal-head.empty .num { color: var(--faint); }
   .cal-head .gutter-lbl { font-size: 9.5px; color: var(--faint); }
+  .col.empty { background-color: rgba(0,0,0,0.12); }
 
   .gutter { border-right: 1px solid var(--line); background: var(--card2); }
   .gutter .hour { height: var(--hour-h); font-family: var(--sans); font-size: 10px;
@@ -525,6 +576,26 @@
                id="threshRange" aria-label="minimum booze confidence percent, dims chips below it">
         <span class="thresh-read" id="threshRead">55%</span>
       </div>
+
+      <div class="fb-filters">
+        <span class="fb-lbl">filter</span>
+        <div class="fb-seg" id="distSeg" role="group" aria-label="distance cap">
+          <button type="button" data-mi="" aria-current="true">any</button>
+          <button type="button" data-mi="1">1<i>mi</i></button>
+          <button type="button" data-mi="2">2<i>mi</i></button>
+          <button type="button" data-mi="3">3<i>mi</i></button>
+          <button type="button" data-mi="5">5<i>mi</i></button>
+        </div>
+        <div class="fb-pop">
+          <button type="button" class="fb-pop-btn" id="tagsBtn" aria-expanded="false">tags</button>
+          <div class="fb-panel" id="tagsPanel"></div>
+        </div>
+        <div class="fb-pop">
+          <button type="button" class="fb-pop-btn" id="sourceBtn" aria-expanded="false">source</button>
+          <div class="fb-panel" id="sourcePanel"></div>
+        </div>
+      </div>
+
       <p class="cal-cap">the whole week, at a glance &mdash; gold pours brightest, everything else still on the shelf.</p>
     </div>
 
@@ -550,7 +621,22 @@
   const GRID_END_HR = 24;    // midnight
   const HOURS = GRID_END_HR - GRID_START_HR;
 
-  let state = { thresh: 55 };
+  // thresh only styles confident-vs-dim (and rides above the now-line);
+  // it never removes a block. The other three are HARD filters that change
+  // which events exist, so the whole grid layout recomputes over survivors.
+  let state = { thresh: 55, maxMi: null, tags: new Set(), sources: new Set() };
+
+  // hard filters, AND-composed (matches design_real.html / app/main.py):
+  //  - distance: events with unknown (null) distance are never dropped;
+  //  - tags: an event with no tags is never dropped by the tag filter,
+  //          otherwise it must share at least one selected tag (union);
+  //  - source: plain membership (every event has exactly one source).
+  function passesFilters(e) {
+    if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi > state.maxMi) return false;
+    if (state.tags.size && (e.tags || []).length && !e.tags.some(t => state.tags.has(t))) return false;
+    if (state.sources.size && !state.sources.has(e.source)) return false;
+    return true;
+  }
 
   function tzParts(iso) {
     // decompose an ISO instant into its America/Los_Angeles wall-clock
@@ -751,9 +837,12 @@
 
   function render() {
     const cal = document.getElementById("cal");
+    // build the day buckets from the FILTERED set only — every downstream
+    // step (lane packing, widths, header counts, empty days) then reflects
+    // exactly what survived the filters.
     const byDay = new Map();
     dayKeys.forEach(k => byDay.set(k, []));
-    EVENTS.forEach(e => {
+    EVENTS.filter(passesFilters).forEach(e => {
       const k = tzParts(e.starts_at).dateKey;
       if (byDay.has(k)) byDay.get(k).push(e);
     });
@@ -761,7 +850,10 @@
     let html = `<div class="cal-head"><span class="gutter-lbl">PT</span></div>`;
     dayKeys.forEach(k => {
       const today = k === TODAY_KEY;
-      html += `<div class="cal-head ${today ? "today" : ""}"><span class="dow">${fmtDow(k)}</span><span class="num">${fmtNum(k)}</span></div>`;
+      const n = byDay.get(k).length;
+      const empty = n === 0;
+      const cnt = empty ? "&mdash;" : (n + " on tap");
+      html += `<div class="cal-head ${today ? "today" : ""} ${empty ? "empty" : ""}"><span class="dow">${fmtDow(k)}</span><span class="num">${fmtNum(k)}</span><span class="cnt">${cnt}</span></div>`;
     });
 
     html += `<div class="gutter">`;
@@ -773,8 +865,9 @@
 
     dayKeys.forEach(k => {
       const today = k === TODAY_KEY;
-      const positions = layoutDay(byDay.get(k));
-      html += `<div class="col ${today ? "today" : ""}" style="height:calc(var(--hour-h) * ${HOURS})">`;
+      const dayEvents = byDay.get(k);
+      const positions = layoutDay(dayEvents);
+      html += `<div class="col ${today ? "today" : ""} ${dayEvents.length ? "" : "empty"}" style="height:calc(var(--hour-h) * ${HOURS})">`;
       positions.forEach(p => { html += chipHtml(p); });
       if (today) {
         // demo "now" line: pin it mid-afternoon on the chosen "today" column
@@ -800,7 +893,8 @@
     });
   }
 
-  // ---- threshold slider ----
+  // ---- threshold slider (independent of the hard filters: it only
+  //      restyles confident-vs-dim; it never adds/removes a block) ----
   const threshRange = document.getElementById("threshRange");
   const threshRead = document.getElementById("threshRead");
   threshRange.addEventListener("input", () => {
@@ -810,6 +904,72 @@
     closePop();
     render();
   });
+
+  // ---- distance stepper (FLAT seg) ----
+  const distSeg = document.getElementById("distSeg");
+  distSeg.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      distSeg.querySelectorAll("button").forEach(b => b.removeAttribute("aria-current"));
+      btn.setAttribute("aria-current", "true");
+      const mi = btn.dataset.mi;
+      state.maxMi = mi === "" ? null : parseFloat(mi);
+      closePop();
+      render();
+    });
+  });
+
+  // ---- tag + source chip popovers (same pattern as design_real.html) ----
+  // counts are over the full dataset (static), matching design_real's
+  // behavior and the deferred item noted in DESIGN.md.
+  const filterPopovers = [];
+
+  function makeChipPopover(btnId, panelId, labelBase, counts, stateSet) {
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+    const keys = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
+    panel.innerHTML = keys.map(k =>
+      `<button type="button" class="fb-chip" data-key="${escapeHtml(k)}">${escapeHtml(k)}<span class="n">${counts.get(k)}</span></button>`
+    ).join("");
+    panel.querySelectorAll(".fb-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const k = chip.dataset.key;
+        if (stateSet.has(k)) stateSet.delete(k); else stateSet.add(k);
+        chip.classList.toggle("on", stateSet.has(k));
+        updateBtn();
+        closePop();
+        render();
+      });
+    });
+    function updateBtn() {
+      if (stateSet.size) { btn.textContent = labelBase + " · " + stateSet.size; btn.classList.add("active"); }
+      else { btn.textContent = labelBase; btn.classList.remove("active"); }
+    }
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const open = !panel.classList.contains("open");
+      filterPopovers.forEach(p => { p.panel.classList.remove("open"); p.btn.setAttribute("aria-expanded", "false"); });
+      panel.classList.toggle("open", open);
+      btn.setAttribute("aria-expanded", String(open));
+    });
+    filterPopovers.push({ btn, panel });
+  }
+
+  document.addEventListener("click", (ev) => {
+    filterPopovers.forEach(p => {
+      if (!p.panel.contains(ev.target) && ev.target !== p.btn) {
+        p.panel.classList.remove("open");
+        p.btn.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+
+  const tagCounts = new Map();
+  EVENTS.forEach(e => (e.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+  const sourceCounts = new Map();
+  EVENTS.forEach(e => sourceCounts.set(e.source, (sourceCounts.get(e.source) || 0) + 1));
+
+  makeChipPopover("tagsBtn", "tagsPanel", "tags", tagCounts, state.tags);
+  makeChipPopover("sourceBtn", "sourcePanel", "source", sourceCounts, state.sources);
 
   render();
 })();
