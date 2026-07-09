@@ -15,7 +15,10 @@ user, deliberately unscoped — see app/data.py.
 
 Run: uv run uvicorn app.main:app --reload
 """
+import html
+import json
 import os
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -115,6 +118,40 @@ def _chip_counts_now(user_id: str) -> dict:
     return filters.chip_counts(data.fetch_events(now, now + timedelta(days=7), user_id))
 
 
+_TAG_OR_URL_RE = re.compile(r"<[^>]*>|https?://\S+")
+_WS_RE = re.compile(r"\s+")
+
+
+def _blurb(desc: str | None, limit: int = 150) -> str:
+    """Clean a raw event `description` into a short client-friendly one-liner:
+    unescape HTML entities, strip tags/URLs, collapse whitespace, and truncate
+    to ~`limit` chars at the last word boundary (with a trailing "…" when
+    truncated). Returns "" for falsy input."""
+    if not desc:
+        return ""
+    text = html.unescape(desc)
+    text = _TAG_OR_URL_RE.sub(" ", text)
+    text = _WS_RE.sub(" ", text).strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    space = cut.rfind(" ")
+    if space > 0:
+        cut = cut[:space]
+    return cut.rstrip() + "…"
+
+
+def _proto_event(e: dict) -> dict:
+    """Augment an Event.to_dict() dict with the flat/normalized fields the
+    ported prototype JS (design_day/real/calendar/map_live) expects, without
+    dropping any existing key — see PORT_SPEC.md §2."""
+    out = dict(e)
+    out["booze"] = round((e.get("scores") or {}).get("booze", 0) * 100)
+    out["rationale"] = (e.get("rationales") or {}).get("booze", "")
+    out["blurb"] = _blurb(e.get("description"))
+    return out
+
+
 # Deliberately has NO dependency: every other route resolves an anonymous
 # identity via app.auth.current_user, but a host's health checker doesn't
 # carry a cookie and doesn't need one — it just needs a plain 200. Keep this
@@ -156,8 +193,10 @@ def calendar(request: Request, f: str | None = None, tags: str | None = None,
     now_min = now.hour * 60 + now.minute
     settings = data.get_settings(user_id)
     counts = _chip_counts_now(user_id)
+    events_json = json.dumps([_proto_event(e.to_dict()) for e in events])
     ctx = {
         "days": days,
+        "events_json": events_json,
         "no_events": not any(d["blocks"] or d["hidden"] for d in days),
         "view": "calendar",
         "hours": list(range(8, 24)),
@@ -232,8 +271,10 @@ def home(request: Request, lens: str = "", f: str | None = None, tags: str | Non
     later = [e for e in events if e is not hero and (not tonight_evts or e["start_dt"].date() != today)]
 
     counts = _chip_counts_now(user_id)
+    events_json = json.dumps([_proto_event(e.to_dict()) for e in events])
     ctx = {
         "view": "tonight",
+        "events_json": events_json,
         "lens": lens, "lenses": LENSES,
         "hero": hero, "hero_label": hero_label,
         "backups": backups,
@@ -267,8 +308,10 @@ def week(request: Request, f: str | None = None, tags: str | None = None,
     events = load_events(user_id, now - timedelta(hours=3), now + timedelta(days=7), fs)
     settings = data.get_settings(user_id)
     counts = _chip_counts_now(user_id)
+    events_json = json.dumps([_proto_event(e.to_dict()) for e in events])
     ctx = {
         "days": presenter.group_by_day(events),
+        "events_json": events_json,
         "view": "week",
         "max_mi": fs.max_mi,
         "min_booze": fs.min_booze,
@@ -308,13 +351,34 @@ def map_view(request: Request, f: str | None = None, tags: str | None = None,
         "booze": round(e["scores"].get("booze", 0) * 100),
         "distance": round(e["distance_mi"], 1) if e["distance_mi"] is not None else None,
     } for e in events if e["lat"] is not None]
+    home_ctx = {"lat": home[0], "lon": home[1]} if home else None
+    map_json = json.dumps({
+        "home": home_ctx,
+        "pins": [{
+            "id": e["id"], "title": e["title"],
+            "venue": e["venue_name"] or "",
+            "neighborhood": e["neighborhood"],
+            "starts_at": e["starts_at"],
+            "is_free": e["is_free"],
+            "lat": e["lat"], "lon": e["lon"],
+            "distance_mi": e["distance_mi"],
+            "booze": round((e["scores"] or {}).get("booze", 0) * 100),
+            "blurb": _blurb(e["description"]),
+            "tags": e["tags"],
+            "source": e["source"],
+            "url": e.get("url", ""),
+            "gcal": e.get("gcal", ""),
+        } for e in events if e["lat"] is not None],
+    })
     counts = _chip_counts_now(user_id)
     return templates.TemplateResponse(request, "map.html", {
         "view": "map",
         "pins": pins,
-        "home": {"lat": home[0], "lon": home[1]} if home else None,
+        "map_json": map_json,
+        "home": home_ctx,
         "home_address": settings.get("home_address", ""),
         "max_mi": fs.max_mi,
+        "min_booze": fs.min_booze,
         "has_home": home is not None,
         "n_unmapped": sum(1 for e in events if e["lat"] is None),
         "tag_counts": counts["tags"], "included_tags": fs.tags,
