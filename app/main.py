@@ -448,7 +448,28 @@ def _save_home(user_id: str, addr: str) -> tuple[float | None, float | None]:
     cached Nominatim call, see ingest.geocode.geocode); if geocoding can't
     resolve it, the address is still saved but the stale lat/lon are cleared so
     distance sorting quietly turns off rather than pointing at the wrong place.
-    Returns (lat, lon) — (None, None) when cleared or unresolved."""
+    Returns (lat, lon) — (None, None) when cleared or unresolved.
+
+    The geocode() call is wrapped in a broad except, not just handled for its
+    "resolved nothing" return case: this runs inline, at request time, from
+    prod's datacenter IP, and Nominatim on a datacenter IP commonly
+    rate-limits or blackholes the request rather than cleanly returning no
+    match — requests.get can raise (timeout/connection reset), and a rate-
+    limit block page returned with a 200 status makes resp.json() raise
+    json.JSONDecodeError. Any such failure must degrade exactly like an
+    unresolved address (save the text, drop stale coords) instead of
+    propagating into a 500 on what should be a "typed my address" request.
+
+    NOTE: on prod this means a home typed by a real visitor currently SAVES
+    but does not RESOLVE — prod's datacenter IP can't reach Nominatim, and no
+    sync path yet carries a visitor's home_address to the residential machine
+    (where geocoding works) or the resulting coords back. `settings` is
+    prod-owned and today neither exported nor pulled (see ARCHITECTURE.md).
+    Closing that loop (export home_address -> geocode locally into
+    geocode_cache -> push -> backfill home coords on prod from the cache) is a
+    tracked follow-up; until then distance sorting stays off for prod visitors,
+    but the page no longer 500s.
+    """
     with get_conn() as conn:
         if not addr:
             conn.execute("DELETE FROM settings WHERE user_id = ? "
@@ -456,7 +477,13 @@ def _save_home(user_id: str, addr: str) -> tuple[float | None, float | None]:
             return None, None
         conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_address', ?)",
                      (user_id, addr))
-        lat, lon = geocode(conn, addr)
+        try:
+            lat, lon = geocode(conn, addr)
+        except Exception as exc:
+            # Network/JSON/value errors from Nominatim all land here — treated
+            # identically to "no match found" (see docstring above).
+            print(f"_save_home: geocode failed for {addr!r}: {exc!r}")
+            lat, lon = None, None
         if lat is not None:
             conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_lat', ?)",
                          (user_id, str(lat)))
