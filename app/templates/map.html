@@ -113,6 +113,8 @@
         color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: 12.5px; width: 180px; }
   .mb-home .set-btn { font-size: 11px; font-weight: 650; color: var(--bg); background: var(--gold);
         border: none; border-radius: 8px; padding: 5px 11px; cursor: pointer; white-space: nowrap; }
+  .mb-home .set-btn[disabled] { opacity: 0.6; cursor: default; }
+  .mb-home-note { color: var(--muted); font-size: 11px; white-space: nowrap; }
   .mb-seg { display: inline-flex; gap: 2px; background: var(--card2);
             border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
   .mb-seg button { font: inherit; font-family: var(--mono); font-size: 11.5px;
@@ -322,9 +324,14 @@
       <div class="mb-panel" id="sourcePanel"></div>
     </div>
   </div>
-  <form class="mb-home" method="post" action="/settings/home">
-    <input type="text" name="home_address" placeholder="home address (for distances)" value="{{ home_address }}">
-    <button class="set-btn" type="submit">{{ 'Update home' if home_address else 'Set home' }}</button>
+  <!-- id'd for the client-side-geocode submit handler below. method/action
+       stay a real form post to /settings/home so a no-JS visitor (or JS that
+       fails to load) still gets the old degrade-gracefully behavior — the
+       handler below calls preventDefault() only once it's actually running. -->
+  <form class="mb-home" method="post" action="/settings/home" id="homeForm">
+    <input type="text" name="home_address" id="homeInput" placeholder="home address (for distances)" value="{{ home_address }}">
+    <button class="set-btn" type="submit" id="homeBtn">{{ 'Update home' if home_address else 'Set home' }}</button>
+    <span class="mb-home-note" id="homeNote" hidden></span>
   </form>
 </div>
 <div class="stage-wrap">
@@ -343,7 +350,7 @@
 <script>
 (function () {
   const DATA = JSON.parse(document.getElementById("map-data").textContent);
-  const HOME = DATA.home || null;
+  let HOME = DATA.home || null;
   const PINS = DATA.pins || [];
   const UNPLACED = DATA.unplaced || []; // not emitted by map_json today; guarded for forward-compat
   const MI_M = 1609.34;
@@ -429,16 +436,34 @@
     attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19,
   }).addTo(map);
 
-  // ---- distance rings at 1/2/3 mi (dashed gold-dim, no fill, non-interactive) ----
-  // only meaningful (and only drawn) when a home is set.
+  // ---- distance rings at 1/2/3 mi (dashed gold-dim, no fill, non-interactive)
+  // + the home marker (gold ring dot + 'home' micro-label, a DivIcon) — both
+  // only meaningful (and only drawn) when a home is set. Pulled into a
+  // renderHome() function (rather than the old one-shot inline block) so the
+  // client-side-geocode submit handler below can redraw them in place after
+  // resolving a new address, with no page reload. ----
   const ringLayers = {};
-  if (HOME) {
+  let homeMarker = null;
+  function renderHome(home) {
+    HOME = home;
+    if (homeMarker) { map.removeLayer(homeMarker); homeMarker = null; }
+    Object.keys(ringLayers).forEach(mi => { map.removeLayer(ringLayers[mi]); delete ringLayers[mi]; });
+    if (!home) return;
     [1, 2, 3].forEach(mi => {
-      ringLayers[mi] = L.circle([HOME.lat, HOME.lon], {
+      ringLayers[mi] = L.circle([home.lat, home.lon], {
         radius: mi * MI_M, interactive: false,
         color: "#8a6733", weight: 1, opacity: 0.35, fill: false, dashArray: "4 6",
       }).addTo(map);
     });
+    homeMarker = L.marker([home.lat, home.lon], {
+      interactive: false, keyboard: false, zIndexOffset: -100,
+      icon: L.divIcon({
+        className: "pin-wrap",
+        html: '<div class="home-pin"></div><div class="home-label">home</div>',
+        iconSize: [14, 14], iconAnchor: [7, 7],
+      }),
+    }).addTo(map);
+    emphasizeRing();
   }
   function emphasizeRing() {
     if (!HOME) return;
@@ -451,18 +476,7 @@
       });
     });
   }
-
-  // ---- home marker: a gold ring dot + 'home' micro-label (a DivIcon) ----
-  if (HOME) {
-    L.marker([HOME.lat, HOME.lon], {
-      interactive: false, keyboard: false, zIndexOffset: -100,
-      icon: L.divIcon({
-        className: "pin-wrap",
-        html: '<div class="home-pin"></div><div class="home-label">home</div>',
-        iconSize: [14, 14], iconAnchor: [7, 7],
-      }),
-    }).addTo(map);
-  }
+  renderHome(HOME);
 
   // ---------------------------------------------------------------
   // PINS as Leaflet markers with a styled DivIcon (Leaflet projects).
@@ -714,6 +728,147 @@
     });
     applyFilters();
   };
+
+  // ===================================================================
+  // CLIENT-SIDE HOME GEOCODE — the whole reason this block exists: prod
+  // runs on a datacenter IP, and Nominatim commonly rate-limits or
+  // blackholes requests from datacenter IPs (see app.main._save_home's
+  // docstring, and ingest/geocode.py's BAY_AREA_VIEWBOX comment). A real
+  // visitor's browser has none of that problem — it's a residential IP
+  // making one search request, exactly like typing the address into
+  // openstreetmap.org directly. So instead of asking prod to geocode, we
+  // resolve the address HERE, in the visitor's own browser, and just hand
+  // the server the resulting {address, lat, lon} to store verbatim
+  // (app.main.api_set_home skips its own geocode call whenever both
+  // coordinates are present — see that route's docstring).
+  //
+  // Nominatim usage-policy compliance: this fires ONLY on form submit
+  // (never per-keystroke autocomplete), issues at most one request in
+  // flight at a time (the ladder below is awaited sequentially, not
+  // parallel-fetched), and relies on the browser's automatic Referer
+  // header for attribution instead of a custom header (fetch() can't set
+  // Referer manually anyway — the browser always sends the page's own
+  // origin, which is what Nominatim's policy asks for). No API key, no
+  // server involved in the lookup itself.
+  //
+  // The ladder + box below are a straight port of ingest/geocode.py's
+  // _bay_area_lookup / _has_locality / BAY_AREA_VIEWBOX / _in_bay_area —
+  // keep these two files' constants and logic in sync; see that module's
+  // docstrings for the full "why" behind each rung (the short version:
+  // Nominatim's unbounded ranking is fine from a Bay-Area IP but not
+  // reliable enough for a bare "1148 masonic ave"-style address, so we
+  // force a Bay Area viewbox first and only fall back to unbounded last).
+  // ===================================================================
+  const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
+  // Mirrors ingest/geocode.py::BAY_AREA_VIEWBOX / BAY_LAT_MIN&MAX / BAY_LON_MIN&MAX exactly.
+  const BAY_AREA_VIEWBOX = "-122.75,38.0,-121.9,37.2";
+  const BAY_LAT_MIN = 37.2, BAY_LAT_MAX = 38.0, BAY_LON_MIN = -122.75, BAY_LON_MAX = -121.9;
+
+  function inBayAreaBox(lat, lon) {
+    return lat != null && lon != null
+      && lat >= BAY_LAT_MIN && lat <= BAY_LAT_MAX && lon >= BAY_LON_MIN && lon <= BAY_LON_MAX;
+  }
+
+  // Mirrors ingest/geocode.py::_has_locality — an address that already states
+  // where it is (comma-separated locality, or names SF/California outright)
+  // is trusted as written instead of nudged toward the Bay Area.
+  function hasLocality(addr) {
+    const low = addr.toLowerCase();
+    return addr.indexOf(",") !== -1 || low.includes("san francisco") || low.includes("california");
+  }
+
+  // One paced call to Nominatim. `bounded` restricts results to
+  // BAY_AREA_VIEWBOX, mirroring ingest/geocode.py::_nominatim_search. Any
+  // failure (network error, non-OK response, empty result) resolves to
+  // null rather than throwing — the ladder below just treats that rung as
+  // a miss and moves on, same as the server-side version does.
+  async function nominatimSearch(query, bounded) {
+    const params = new URLSearchParams({ q: query, format: "json", limit: "1" });
+    if (bounded) { params.set("viewbox", BAY_AREA_VIEWBOX); params.set("bounded", "1"); }
+    try {
+      const res = await fetch(`${NOMINATIM_URL}?${params.toString()}`);
+      if (!res.ok) return null;
+      const hits = await res.json();
+      if (!hits || !hits.length) return null;
+      return { lat: parseFloat(hits[0].lat), lon: parseFloat(hits[0].lon) };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Mirrors ingest/geocode.py::_bay_area_lookup's 5-rung fallback ladder,
+  // each rung sanity-checked against the Bay Area box before being trusted
+  // (bounded=1 usually enforces this Nominatim-side too, but same
+  // belt-and-suspenders reasoning as the server). In practice rung 1
+  // resolves the vast majority of addresses, so this is typically a single
+  // request, not five.
+  async function bayAreaLookup(query) {
+    let hit = await nominatimSearch(query, true);
+    if (hit && inBayAreaBox(hit.lat, hit.lon)) return hit;
+    for (const city of ["San Francisco, CA", "Oakland, CA", "Berkeley, CA"]) {
+      hit = await nominatimSearch(`${query}, ${city}`, true);
+      if (hit && inBayAreaBox(hit.lat, hit.lon)) return hit;
+    }
+    return await nominatimSearch(query, false); // last resort, unbounded
+  }
+
+  // Mirrors ingest/geocode.py::_lookup's dispatch (no cache here — this is a
+  // one-off lookup in the visitor's own browser, not the shared geocode_cache
+  // table; the server still owns that cache for the pipeline's own use).
+  async function geocodeHomeAddress(addr) {
+    return hasLocality(addr) ? await nominatimSearch(addr, false) : await bayAreaLookup(addr);
+  }
+
+  // ---- wire the home form: geocode in-browser, POST the resolved point to
+  // /api/home, redraw the marker/rings in place (no reload). Falls back to
+  // the plain address-only POST (or, if fetch itself fails, effectively a
+  // no-op — the plain <form> POST underneath still works on a full page
+  // load) so the button is never left stuck and home is never silently
+  // unset by a network hiccup. ----
+  const homeForm = document.getElementById("homeForm");
+  const homeInput = document.getElementById("homeInput");
+  const homeBtn = document.getElementById("homeBtn");
+  const homeNote = document.getElementById("homeNote");
+
+  homeForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault(); // progressive enhancement: once this handler runs, it fully replaces the plain POST /settings/home
+    const addr = homeInput.value.trim();
+    homeNote.hidden = true;
+    homeBtn.disabled = true;
+    homeBtn.textContent = "locating…";
+    try {
+      const hit = addr ? await geocodeHomeAddress(addr) : null;
+      const payload = { address: addr };
+      if (hit) { payload.lat = hit.lat; payload.lon = hit.lon; }
+      const res = await fetch("/api/home", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`api/home ${res.status}`);
+      const saved = await res.json();
+      if (saved.resolved) {
+        renderHome({ lat: saved.lat, lon: saved.lon });
+        map.setView([saved.lat, saved.lon], 13);
+      } else {
+        renderHome(null);
+        if (addr) {
+          homeNote.textContent = "couldn't pinpoint that address — distances off";
+          homeNote.hidden = false;
+        }
+      }
+    } catch (err) {
+      // Either the in-browser Nominatim ladder totally failed (already
+      // degrades to hit=null above, not an exception) or our own /api/home
+      // request itself failed (offline, prod hiccup). Either way: don't
+      // leave the visitor guessing or the button stuck.
+      homeNote.textContent = "couldn't save — try again";
+      homeNote.hidden = false;
+    } finally {
+      homeBtn.disabled = false;
+      homeBtn.textContent = homeInput.value.trim() ? "Update home" : "Set home";
+    }
+  });
 })();
 </script>
 </body>

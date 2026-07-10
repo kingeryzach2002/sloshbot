@@ -17,13 +17,14 @@ Run: uv run uvicorn app.main:app --reload
 """
 import html
 import json
+import math
 import os
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form
+from fastapi import Depends, FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -36,7 +37,7 @@ from app.auth import current_user
 from app.filters import FilterState
 from app.models import Event
 from db import get_conn, init_db
-from ingest.geocode import geocode
+from ingest.geocode import geocode, _in_bay_area
 from scoring.weights import (LENS_META, LENSES, TIER_CONFIDENT, TIER_MAYBE,
                              WEIGHTS)
 
@@ -442,17 +443,31 @@ def save_filter_settings(body: FilterSettingsBody, user_id: str = Depends(curren
     return {"ok": True}
 
 
-def _save_home(user_id: str, addr: str) -> tuple[float | None, float | None]:
+def _save_home(user_id: str, addr: str,
+                coords: tuple[float | None, float | None] | None = None) -> tuple[float | None, float | None]:
     """The one place home address + geocoded coords are written. addr="" clears
-    all three home_* keys. A non-empty addr is stored and geocoded inline (one
-    cached Nominatim call, see ingest.geocode.geocode); if geocoding can't
-    resolve it, the address is still saved but the stale lat/lon are cleared so
-    distance sorting quietly turns off rather than pointing at the wrong place.
-    Returns (lat, lon) — (None, None) when cleared or unresolved.
+    all three home_* keys. Returns (lat, lon) — (None, None) when cleared or
+    unresolved.
 
-    The geocode() call is wrapped in a broad except, not just handled for its
-    "resolved nothing" return case: this runs inline, at request time, from
-    prod's datacenter IP, and Nominatim on a datacenter IP commonly
+    `coords`, when given, is trusted as already-resolved and is stored
+    verbatim WITHOUT calling the server-side geocoder at all — this is the
+    client-side-geocode path (api_set_home, below): the visitor's own browser
+    resolves the address via Nominatim from THEIR residential IP and hands us
+    the result, so this call never touches the network. `coords=(None, None)`
+    is also valid (client resolved nothing, or its point failed the Bay Area
+    sanity check) and behaves exactly like a failed server geocode: address
+    saved, stale lat/lon cleared.
+
+    When `coords` is None (no client resolution happened — a no-JS form post,
+    or an old caller that hasn't been updated), a non-empty addr is geocoded
+    inline instead (one cached Nominatim call, see ingest.geocode.geocode); if
+    geocoding can't resolve it, the address is still saved but the stale
+    lat/lon are cleared so distance sorting quietly turns off rather than
+    pointing at the wrong place.
+
+    The inline geocode() call is wrapped in a broad except, not just handled
+    for its "resolved nothing" return case: this runs inline, at request time,
+    from prod's datacenter IP, and Nominatim on a datacenter IP commonly
     rate-limits or blackholes the request rather than cleanly returning no
     match — requests.get can raise (timeout/connection reset), and a rate-
     limit block page returned with a 200 status makes resp.json() raise
@@ -460,15 +475,13 @@ def _save_home(user_id: str, addr: str) -> tuple[float | None, float | None]:
     unresolved address (save the text, drop stale coords) instead of
     propagating into a 500 on what should be a "typed my address" request.
 
-    NOTE: on prod this means a home typed by a real visitor currently SAVES
-    but does not RESOLVE — prod's datacenter IP can't reach Nominatim, and no
-    sync path yet carries a visitor's home_address to the residential machine
-    (where geocoding works) or the resulting coords back. `settings` is
-    prod-owned and today neither exported nor pulled (see ARCHITECTURE.md).
-    Closing that loop (export home_address -> geocode locally into
-    geocode_cache -> push -> backfill home coords on prod from the cache) is a
-    tracked follow-up; until then distance sorting stays off for prod visitors,
-    but the page no longer 500s.
+    NOTE: this inline server geocode is still a fallback of last resort, not
+    the primary path — on prod it usually resolves nothing at all, since
+    prod's datacenter IP can't reach Nominatim reliably (see BAY_AREA note in
+    ingest/geocode.py and ARCHITECTURE.md's split-host sync model). The
+    client-side-geocode path above is what actually resolves a real visitor's
+    home on prod; this except-guarded inline path just keeps the no-JS form
+    (`POST /settings/home`) from 500ing instead of leaving it broken.
     """
     with get_conn() as conn:
         if not addr:
@@ -477,13 +490,16 @@ def _save_home(user_id: str, addr: str) -> tuple[float | None, float | None]:
             return None, None
         conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_address', ?)",
                      (user_id, addr))
-        try:
-            lat, lon = geocode(conn, addr)
-        except Exception as exc:
-            # Network/JSON/value errors from Nominatim all land here — treated
-            # identically to "no match found" (see docstring above).
-            print(f"_save_home: geocode failed for {addr!r}: {exc!r}")
-            lat, lon = None, None
+        if coords is not None:
+            lat, lon = coords
+        else:
+            try:
+                lat, lon = geocode(conn, addr)
+            except Exception as exc:
+                # Network/JSON/value errors from Nominatim all land here — treated
+                # identically to "no match found" (see docstring above).
+                print(f"_save_home: geocode failed for {addr!r}: {exc!r}")
+                lat, lon = None, None
         if lat is not None:
             conn.execute("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'home_lat', ?)",
                          (user_id, str(lat)))
@@ -509,6 +525,24 @@ def api_get_home(user_id: str = Depends(current_user)):
 
 class HomeBody(BaseModel):
     address: str = ""
+    # Optional client-resolved coordinates — see api_set_home. Absent (the
+    # legacy shape) means "geocode it yourself" and falls back to the
+    # server-side inline geocode in _save_home.
+    lat: float | None = None
+    lon: float | None = None
+
+
+def _plausible_coords(lat: float | None, lon: float | None) -> bool:
+    """Sanity-check a client-supplied point BEFORE it's trusted at all: reject
+    non-finite values (JSON technically permits the NaN/Infinity literals,
+    and a buggy/malicious client could send them) and anything off the globe.
+    This is separate from the Bay Area box check in api_set_home — that one
+    decides whether an otherwise-valid point is *useful* to us; this one
+    guards against garbage that would corrupt distance-sort math or blow up
+    on the map."""
+    return (isinstance(lat, (int, float)) and isinstance(lon, (int, float))
+            and math.isfinite(lat) and math.isfinite(lon)
+            and -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0)
 
 
 @app.post("/api/home")
@@ -516,10 +550,35 @@ def api_set_home(body: HomeBody, user_id: str = Depends(current_user)):
     """Set (or clear, with address="") the visitor's home address via fetch,
     no page reload. `resolved` tells the UI whether the address geocoded — so
     it can warn "couldn't find that address; distance sorting is off" instead
-    of silently doing nothing."""
-    lat, lon = _save_home(user_id, body.address.strip())
-    return {"ok": True, "resolved": lat is not None,
-            "address": body.address.strip(), "lat": lat, "lon": lon}
+    of silently doing nothing.
+
+    If the caller supplies BOTH lat and lon, they're treated as already
+    resolved client-side (see map.html's submit handler, which geocodes in
+    the visitor's own browser via Nominatim) and are stored directly —
+    _save_home is told to skip its own geocode call entirely, which is the
+    whole point: prod's datacenter IP can't reliably reach Nominatim, but the
+    visitor's residential browser can. If lat/lon are absent, behavior is
+    unchanged from before: _save_home geocodes server-side inline (best-
+    effort, degrades to unresolved rather than 500ing — see its docstring).
+
+    A supplied point that's off the globe (NaN/inf, or outside real lat/lon
+    bounds) is rejected outright with a 400 — that's not a "wrong place", it's
+    a malformed request. A supplied point that IS a real-world coordinate but
+    falls outside the Bay Area box is instead treated as unresolved (address
+    saved, coords cleared, `resolved: false`): the catalog is Bay-Area-only
+    anyway, so a broken/misbehaving client's out-of-region point is exactly as
+    useless to us as no geocode at all, and silently trusting it would point
+    distance-sort at the wrong place rather than just turning it off.
+    """
+    addr = body.address.strip()
+    if body.lat is not None and body.lon is not None:
+        if not _plausible_coords(body.lat, body.lon):
+            raise HTTPException(status_code=400, detail="invalid coordinates")
+        coords = (body.lat, body.lon) if _in_bay_area(body.lat, body.lon) else (None, None)
+        lat, lon = _save_home(user_id, addr, coords=coords)
+    else:
+        lat, lon = _save_home(user_id, addr)
+    return {"ok": True, "resolved": lat is not None, "address": addr, "lat": lat, "lon": lon}
 
 
 @app.post("/settings/home")
