@@ -23,7 +23,11 @@ LENS_META = {
 }
 
 TIER_CONFIDENT = 0.65  # >= this -> "confident"
-TIER_MAYBE = 0.40      # >= this -> "maybe"; below -> hidden
+TIER_MAYBE = 0.10      # >= this -> "maybe"; below -> hidden. Deliberately
+                       # permissive (was 0.40): with the catalog now fully
+                       # scraped, 0.40 starved every view to ~a quarter of the
+                       # week's events — surface nearly everything and let the
+                       # confident tier + ranking carry the taste.
 
 MAX_PICKS = 3  # hard cap on top-tier events per day — scarcity is the product
 
