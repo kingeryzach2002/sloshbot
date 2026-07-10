@@ -24,7 +24,7 @@ sloshbot/
 ├── scripts/
 │   ├── run_daily.sh              # launchd entrypoint: sources .env.sloshbot,
 │   │                               #   execs `sync run`
-│   ├── com.sloshbot.pipeline.plist  # launchd schedule (daily 07:30)
+│   ├── com.sloshbot.daily.plist  # launchd schedule (daily 07:30)
 │   └── install_launchd.sh        # idempotent installer for the plist
 ├── ingest/
 │   ├── schema.sql       # canonical DDL
@@ -167,7 +167,7 @@ signal); an empty events list is refused on push unless `--force`, since prod
 treats "no events in the payload" as "delete the whole untouched catalog."
 Config (`SLOSHBOT_PROD_URL`, `SLOSHBOT_ADMIN_TOKEN`, `ANTHROPIC_API_KEY`) lives
 in `.env.sloshbot` (gitignored; see `.env.sloshbot.example`), sourced by
-`scripts/run_daily.sh`, which `scripts/com.sloshbot.pipeline.plist` fires
+`scripts/run_daily.sh`, which `scripts/com.sloshbot.daily.plist` fires
 daily at 07:30 via launchd (missed firings while asleep catch up on wake).
 
 ## Anonymous identity & per-visitor scoping

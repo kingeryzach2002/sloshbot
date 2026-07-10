@@ -206,7 +206,7 @@ to `~/Library/Logs/sloshbot/pipeline.log`. Open it in any text editor, or
 change):
 
 ```
-launchctl kickstart gui/$(id -u)/com.sloshbot.pipeline
+launchctl kickstart gui/$(id -u)/com.sloshbot.daily
 ```
 
 **What happens on the schedule:** the job is set to run daily at 7:30am. If

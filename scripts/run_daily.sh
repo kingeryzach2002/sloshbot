@@ -1,5 +1,5 @@
 #!/bin/bash
-# launchd wrapper for the daily sync run (com.sloshbot.pipeline.plist calls
+# launchd wrapper for the daily sync run (com.sloshbot.daily.plist calls
 # this, not `uv` directly) — launchd agents start with a bare environment
 # (no shell profile sourced, no PATH beyond /usr/bin:/bin:/usr/sbin:/sbin), so
 # this script is what stitches together a real working shell before handing
