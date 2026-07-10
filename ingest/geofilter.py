@@ -17,9 +17,11 @@ Policy (decided with the owner):
     be outside the radius. Events with NULL lat/lon are KEPT — they came from
     already-SF-scoped sources and may just have failed geocoding; dropping them
     on a geocoder hiccup would lose legitimate SF events.
-  - Radius is a generous "inner Bay Area" catchment (SF + inner East Bay incl.
-    Oakland/Berkeley), tuned as a coarse backstop against gross leaks rather
-    than fine curation. See RADIUS_MI below.
+  - Radius is centered on the Mission (where the owner actually lives/goes
+    out), tuned as a coarse backstop against gross leaks rather than fine
+    curation. See RADIUS_MI below — note it now excludes Berkeley (~9.5mi from
+    the Mission), a known/accepted tradeoff, not an oversight; see the comment
+    on MISSION_CENTER_LAT/LON below.
   - Never delete an event that has feedback or a hold (same guarantee as
     pipeline.prune_old_events): that's the crowdsourced host-reputation signal
     scoring depends on. In practice a far-away leak never has feedback, so this
@@ -31,17 +33,21 @@ import math
 
 from db import get_conn, init_db
 
-# Central SF (roughly the Mission/downtown centroid). The radius is a loose
-# "inner Bay Area" backstop, not precise curation — its only job is to reject
-# gross leaks (Vancouver, LA, NYC), so it errs generous. 12mi from central SF
-# covers all of SF (~5mi) plus the inner East Bay the owner wants included:
-# downtown Oakland is ~8.3mi and downtown Berkeley ~10.4mi, both of which an
-# 8mi radius would have wrongly excluded. Daly City, Alameda, Emeryville, and
-# Sausalito all fall well inside 12mi too; anything truly out of region is
-# hundreds of miles out and nowhere near the cutoff.
-SF_CENTER_LAT = 37.7749
-SF_CENTER_LON = -122.4194
-RADIUS_MI = 12.0
+# Mission district center (the owner's actual anchor point, not a generic
+# "downtown SF" centroid). The radius is a backstop against gross leaks
+# (Vancouver, LA, NYC), not precise curation, but per the owner it should now
+# be tight enough to meaningfully shrink the East Bay catchment: 8mi from the
+# Mission covers all of SF proper; Oakland is now a mixed bag — West Oakland/
+# Jack London Square (~7.3-7.9mi) stay in, but City Hall/downtown/Lake Merritt
+# (~8.2-9.1mi) fall outside — and Berkeley is OUT entirely (~9.5-11.5mi across
+# downtown/campus/West Berkeley, all past the cutoff). That's a known,
+# owner-accepted tradeoff (told explicitly), not a bug: Berkeley events (and
+# now much of Oakland) will be dropped by this filter until the radius is
+# widened again, which is one constant to change here if that's ever
+# revisited.
+MISSION_CENTER_LAT = 37.7599
+MISSION_CENTER_LON = -122.4148
+RADIUS_MI = 8.0
 
 
 def _haversine_mi(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -64,7 +70,7 @@ def cull_far_events() -> int:
                  AND NOT EXISTS (SELECT 1 FROM holds h WHERE h.event_id = e.id)"""
         ).fetchall()
         far = [r["id"] for r in rows
-               if _haversine_mi(SF_CENTER_LAT, SF_CENTER_LON, r["lat"], r["lon"]) > RADIUS_MI]
+               if _haversine_mi(MISSION_CENTER_LAT, MISSION_CENTER_LON, r["lat"], r["lon"]) > RADIUS_MI]
         if not far:
             return 0
         placeholders = ",".join("?" * len(far))
@@ -79,7 +85,7 @@ def main() -> int:
     init_db()
     removed = cull_far_events()
     print(f"geofilter: removed {removed} event(s) outside "
-          f"{RADIUS_MI:.0f}mi of SF center")
+          f"{RADIUS_MI:.0f}mi of the Mission")
     return 0
 
 
