@@ -19,8 +19,11 @@ sloshbot/
 ├── ingest/
 │   ├── schema.sql       # canonical DDL
 │   ├── sources/         # one module per source (luma, eventbrite, funcheap,
-│   │   └── ...          #   dothebay, garysguide, meetup, ra, nineteenhz);
-│   │                     #   each exposes fetch() -> list[RawEvent]
+│   │   └── ...          #   dothebay, garysguide); each exposes
+│   │                     #   fetch() -> list[RawEvent]. Disabled sources are
+│   │                     #   kept as _-prefixed modules (run.py skips them):
+│   │                     #   _ra, _nineteenhz, _meetup — surfaced nothing for
+│   │                     #   the booze lens, so pruned from ingestion.
 │   ├── tags.py          # assigns each event tags from a hand-pruned vocabulary
 │   ├── dedup.py         # cross-source duplicate detection (sets duplicate_of)
 │   ├── geocode.py       # fills lat/lon from address (cached Nominatim lookups);

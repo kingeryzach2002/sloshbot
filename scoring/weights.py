@@ -27,11 +27,13 @@ TIER_MAYBE = 0.40      # >= this -> "maybe"; below -> hidden
 
 MAX_PICKS = 3  # hard cap on top-tier events per day — scarcity is the product
 
-# Nightlife-listing sources (RA, 19hz) are structurally paid-cover / cash-bar
-# club nights, not free-booze mixers — a high booze score there is much more
-# likely to be a scorer false-positive than genuine sponsorship. Never let
-# them compete for a "confident" slot; they can still surface as "maybe".
-NEVER_CONFIDENT_SOURCES = {"ra", "19hz"}
+# Sources to cap at "maybe" — never let them win a "confident" slot even on a
+# high booze score, because that score is more likely a scorer false-positive
+# than genuine free-booze sponsorship. Empty now: the original members (the
+# nightlife-listing sources RA and 19hz — structurally paid-cover / cash-bar
+# club nights) were removed as ingest sources entirely (they surfaced nothing).
+# Kept as a live mechanism: add any future demote-but-don't-drop source here.
+NEVER_CONFIDENT_SOURCES: set[str] = set()
 
 
 def composite(scores: dict[str, float], weights: dict[str, float] | None = None) -> float:
