@@ -33,9 +33,18 @@
         height: var(--hdr-h); padding: 0 20px;
         display: flex; align-items: center; justify-content: space-between; gap: 24px;
         background: var(--bg); border-bottom: 1px solid var(--line); }
+  /* wordmark + tagline sit together as one unit on the left; wrapping them
+     keeps the header's space-between from flinging the tagline to the middle */
+  header .brand { display: flex; align-items: baseline; gap: 11px; min-width: 0; }
   header h1.wordmark { font-family: var(--serif); font-style: italic; font-weight: 600;
         font-size: 23px; line-height: 1; margin: 0; color: var(--text); }
   header h1.wordmark .tip { color: var(--gold); }
+  /* quiet sans tagline — the wordmark stays the loud element; this is a
+     supporting line, muted like the nav/labels. Hidden on narrow screens so
+     it never crowds the nav. */
+  header .brand-tag { font-family: var(--sans); font-size: 12px; font-weight: 500;
+        letter-spacing: 0.03em; color: var(--faint); white-space: nowrap; }
+  @media (max-width: 560px) { header .brand-tag { display: none; } }
 
   header nav { display: flex; align-items: center; gap: 22px; }
   header nav a { position: relative; color: var(--muted); text-decoration: none;

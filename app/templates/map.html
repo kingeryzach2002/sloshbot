@@ -24,9 +24,13 @@
         min-height: var(--hdr-h, 52px); padding: 0 20px;
         display: flex; align-items: center; justify-content: space-between; gap: 24px;
         background: var(--bg); border-bottom: 1px solid var(--line); }
+  .site-header .brand { display: flex; align-items: baseline; gap: 11px; min-width: 0; }
   .site-header h1.wordmark { font-family: var(--serif); font-style: italic; font-weight: 600;
         font-size: 23px; line-height: 1; margin: 0; color: var(--text); }
   .site-header h1.wordmark .tip { color: var(--gold); }
+  .site-header .brand-tag { font-family: var(--sans); font-size: 12px; font-weight: 500;
+        letter-spacing: 0.03em; color: var(--faint); white-space: nowrap; }
+  @media (max-width: 560px) { .site-header .brand-tag { display: none; } }
   .site-header nav { display: flex; align-items: center; gap: 22px; }
   .site-header nav a { position: relative; color: var(--muted); text-decoration: none;
         font-family: var(--sans); font-size: 13.5px; letter-spacing: 0.05em;
@@ -272,7 +276,10 @@
 <body>
 
 <header class="site-header">
-  <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
+  <div class="brand">
+    <h1 class="wordmark">slosh<span class="tip">bot</span></h1>
+    <span class="brand-tag">your free booze finder</span>
+  </div>
   <nav>
     <a href="/">Tonight</a>
     <a href="/week">This week</a>
