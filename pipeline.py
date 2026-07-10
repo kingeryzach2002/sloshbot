@@ -1,5 +1,5 @@
-"""Unified data-layer refresh: ingest -> dedup -> geocode -> geofilter -> score
--> blurbs -> prune.
+"""Unified data-layer refresh: ingest -> dedup -> geocode -> geofilter -> tags
+-> score -> blurbs -> prune.
 
 Host-agnostic — invoke once from cron / a systemd timer, or pass --loop to run
 forever with a sleep interval (for a host with no native scheduler). Ingestion
@@ -36,6 +36,12 @@ STEPS = [
     # out-of-area. Source-agnostic backstop for feeds that leak non-Bay-Area
     # events (e.g. Luma's SF place feed); see ingest/geofilter.py.
     ("geofilter", [sys.executable, "-m", "ingest.geofilter"]),
+    # tags after geofilter (so we don't tag events about to be dropped) and
+    # before scoring. Deterministic keyword/source-category extraction, no LLM —
+    # cheap to re-derive every cycle. It was previously a manual `-m ingest.tags`
+    # step that never ran in prod, so prod events showed up untagged; wiring it
+    # in fixes that (mirrors the blurb self-heal below).
+    ("tags", [sys.executable, "-m", "ingest.tags"]),
 ]
 
 
