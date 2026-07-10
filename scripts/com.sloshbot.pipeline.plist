@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sloshbot.pipeline</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/zfrancis/Desktop/Personal/sloshbot/scripts/run_daily.sh</string>
+    </array>
+
+    <!-- Daily at 7:30am. launchd runs a missed StartCalendarInterval firing
+         once on wake if the Mac was asleep at the scheduled time, so a
+         laptop that's closed overnight still catches up instead of just
+         skipping the day. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <!-- Don't also fire immediately on every launchctl bootstrap/login —
+         only run on the schedule above (plus manual `launchctl kickstart`). -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/zfrancis/Library/Logs/sloshbot/pipeline.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/zfrancis/Library/Logs/sloshbot/pipeline.log</string>
+</dict>
+</plist>

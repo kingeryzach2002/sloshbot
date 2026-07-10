@@ -19,9 +19,11 @@ Settings -> Environment Variables). They are read when the container starts.
 | Variable | What it does |
 |---|---|
 | `SLOSHBOT_SECRET_KEY` | A random secret that signs each visitor's anonymous identity cookie, so no one can impersonate another visitor. Set once, never share it. |
-| `ANTHROPIC_API_KEY` | Lets the app call Claude to help score/summarize events. Required for scoring to work. |
-| `PIPELINE_INTERVAL_HOURS` | How often (in hours) the app refreshes event data in the background. Leave unset (or `0`) if your host has its own scheduler and you're running the refresh job separately instead. |
+| `SLOSHBOT_ADMIN_TOKEN` | A shared secret that lets your own computer's daily refresh job push fresh events to this host. See "The daily refresh now runs on your own computer" below. |
 | `PORT` | Which network port the app listens on. Most hosts set this automatically — you usually don't need to touch it. |
+
+`ANTHROPIC_API_KEY` is **no longer needed on the host** — event scoring now
+happens on your own computer, not here. See below.
 
 ## Optional: offsite backup (Litestream)
 
@@ -106,23 +108,31 @@ file automatically on every boot. Variables you can put in it:
 
 | Variable | What it does |
 |---|---|
-| `ANTHROPIC_API_KEY` | Lets the app call Claude to help score/summarize events. Required for scoring to work. |
 | `SLOSHBOT_SECRET_KEY` | Signs each visitor's anonymous identity cookie so no one can impersonate another visitor. You normally don't need to set this yourself — see below. |
-| `PIPELINE_INTERVAL_HOURS` | How often (in hours) the background refresh runs. Defaults to `4` automatically on OpenHost (see below); set this only to override that default. |
+| `SLOSHBOT_ADMIN_TOKEN` | Lets your own computer's daily refresh job push fresh events here. You normally don't need to set this yourself either — see below. |
 | `LITESTREAM_BUCKET`, `LITESTREAM_ENDPOINT`, `LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY` | Same offsite-backup variables described above — same meaning, just placed in this file instead of a dashboard. |
 
-**Self-generating secret key:** you don't have to invent or set
-`SLOSHBOT_SECRET_KEY` yourself. On first boot, if it isn't already present
-in `secrets.env`, sloshbot generates a random one and saves it back into
-that file automatically, so visitor identities are secure from the very
-first deploy with zero action from you. (If you ever want to force new
-visitor identities — e.g. after a suspected leak — delete that line from
-`secrets.env` and redeploy; a fresh one will be generated.)
+`ANTHROPIC_API_KEY` does **not** go here anymore — event scoring runs on your
+own computer now, not on OpenHost. See "The daily refresh now runs on your
+own computer" below.
 
-**Background refresh runs by default:** unlike Railway (where you set
-`PIPELINE_INTERVAL_HOURS` yourself because you might be using an external
-scheduler), OpenHost has no cron/scheduler feature at all, so sloshbot
-defaults the refresh loop to every 4 hours automatically — no setup needed.
+**Self-generating secret key and admin token:** you don't have to invent or
+set `SLOSHBOT_SECRET_KEY` or `SLOSHBOT_ADMIN_TOKEN` yourself. On first boot,
+if either isn't already present in `secrets.env`, sloshbot generates a random
+value and saves it back into that file automatically — visitor identities are
+secure, and your computer's daily sync job has a token to authenticate with,
+from the very first deploy with zero action from you. (If you ever want to
+force new visitor identities, or rotate the sync token, delete the
+corresponding line from `secrets.env` and redeploy; a fresh one will be
+generated.) You'll need to copy the generated `SLOSHBOT_ADMIN_TOKEN` value out
+of `secrets.env` once, to paste into your computer's `.env.sloshbot` — see
+below.
+
+**No background refresh runs on the host anymore:** event sources
+increasingly block requests from datacenter IPs like OpenHost's, so scraping
+and scoring both moved to your own computer, which pushes the finished
+catalog here over HTTPS once a day. OpenHost never scrapes and never calls
+Claude. See the next section.
 
 **Custom domain via Cloudflare redirect (this is how the live site is set
 up):** OpenHost apps get a URL like
@@ -161,3 +171,51 @@ Note: this is a redirect, not a proxy, so visitors' browsers show the
 `selfhost.imbue.com` address in the bar after landing — that's expected, not a
 bug, and there's no way around it without native custom-domain support (see
 above).
+
+## The daily refresh now runs on your own computer
+
+Event sites increasingly block requests coming from datacenter servers like
+OpenHost or Railway, so scraping and scoring no longer happen on the hosted
+server at all. Instead, your own Mac scrapes and scores events once a day and
+pushes the finished results to the server over the internet. The server
+itself never scrapes anything and never calls Claude anymore — it just serves
+whatever was last pushed to it.
+
+**One-time setup, on your Mac:**
+
+1. In the `sloshbot` folder, copy `.env.sloshbot.example` to a new file named
+   `.env.sloshbot` (this file is never committed to git — it holds secrets).
+2. Open it and fill in three values:
+   - `SLOSHBOT_PROD_URL` — the URL of your hosted server (e.g.
+     `https://sloshbot.kingeryzach2002.selfhost.imbue.com`).
+   - `SLOSHBOT_ADMIN_TOKEN` — copy this from the server's `secrets.env` file
+     (OpenHost auto-generates it on first boot; open `secrets.env` via the
+     File Browser app as described above and copy the
+     `SLOSHBOT_ADMIN_TOKEN=...` line's value).
+   - `ANTHROPIC_API_KEY` — your Claude API key. This now belongs here, not on
+     the hosted server.
+3. Run `scripts/install_launchd.sh` once. This registers a daily job with
+   macOS (launchd — the built-in scheduler, similar to cron) that runs the
+   refresh automatically. Safe to re-run any time you change the schedule.
+
+**Checking logs:** the job's output (both normal logs and errors) is written
+to `~/Library/Logs/sloshbot/pipeline.log`. Open it in any text editor, or
+`tail -f ~/Library/Logs/sloshbot/pipeline.log` in Terminal to watch it live.
+
+**Running it manually** (don't want to wait for the schedule, or testing a
+change):
+
+```
+launchctl kickstart gui/$(id -u)/com.sloshbot.pipeline
+```
+
+**What happens on the schedule:** the job is set to run daily at 7:30am. If
+your laptop is asleep at 7:30 (lid closed), macOS runs the missed job as soon
+as it wakes up instead of skipping the day — you don't need to keep the
+laptop on a schedule or awake overnight.
+
+**After pulling new code:** if you (or an engineer) change how the server or
+the refresh job work, redeploy the server from the OpenHost/Railway dashboard
+(see "Deploying" above) so it picks up the new code — the daily job on your
+Mac also needs to be running the latest code, so re-run
+`scripts/install_launchd.sh` after pulling changes there too.

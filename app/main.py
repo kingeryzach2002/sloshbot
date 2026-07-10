@@ -31,6 +31,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
 from app import data, filters, policy, presenter
+from app.admin import router as admin_router
 from app.auth import current_user
 from app.filters import FilterState
 from app.models import Event
@@ -68,6 +69,10 @@ FEEDBACK_PAIRS = {"went": "skipped", "skipped": "went",
                   "as_promised": "not_as_promised", "not_as_promised": "as_promised"}
 templates.env.globals["feedback_pairs"] = FEEDBACK_PAIRS
 init_db()
+# Read-only prod host's sync seam with the external pipeline machine — see
+# app/admin.py for the full contract. Fails closed (503) unless
+# SLOSHBOT_ADMIN_TOKEN is set, so mounting it unconditionally is safe.
+app.include_router(admin_router)
 
 
 def resolve_filters(user_id: str, f: str | None, tags: str | None, sources: str | None,

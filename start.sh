@@ -1,17 +1,15 @@
 #!/bin/sh
-# Container entrypoint. Two independent modes, controlled by env:
+# Container entrypoint. This host is a READ-ONLY web server: the scrape ->
+# score refresh runs exclusively on an external residential machine (event
+# sources increasingly block datacenter IPs, and this host should carry as
+# little scraping capability as possible) and pushes the result here over
+# HTTPS via POST /admin/ingest (see app/admin.py), after pulling the
+# crowd-signal feedback/holds it needs via GET /admin/export. That external
+# machine owns the refresh schedule; this container never runs the pipeline.
+# (The old PIPELINE_INTERVAL_HOURS in-container loop is gone — run
+# `uv run python -m pipeline` on the external machine instead.)
 #
-#   PIPELINE_INTERVAL_HOURS set (nonzero) -> this container also runs the
-#     data-refresh loop (ingest -> dedup -> geocode -> score -> prune) in the
-#     background via `pipeline.py --loop`, on top of serving the web app.
-#     Use this on hosts with no native scheduler/cron.
-#
-#   PIPELINE_INTERVAL_HOURS unset or 0 -> web app only. Use this on hosts that
-#     have native cron/scheduled-job support; point that at
-#     `uv run python -m pipeline` as a separate scheduled job instead, so the
-#     web process and the refresh job scale/restart independently.
-#
-# Plus one more, orthogonal, mode layered on top of both of the above:
+# One mode, controlled by env:
 #
 #   LITESTREAM_BUCKET set (non-empty) -> offsite backup is enabled. On boot,
 #     Litestream restores /data/sloshbot.db from the bucket if the local file
@@ -21,11 +19,6 @@
 #
 #   LITESTREAM_BUCKET unset or empty -> Litestream is never invoked; the
 #     container behaves exactly as it did before this feature existed.
-#
-# set -e would kill this script (and the whole container) if the background
-# pipeline loop's subshell ever exited nonzero; we don't want a pipeline
-# hiccup to take down the web server, so error handling is explicit below
-# instead of relying on set -e.
 set -u
 
 # --- OpenHost bootstrapping ------------------------------------------------
@@ -76,20 +69,25 @@ if [ -z "${SLOSHBOT_SECRET_KEY:-}" ] && [ -n "${OPENHOST_APP_DATA_DIR:-}" ]; the
   echo "start.sh: generated and persisted a new SLOSHBOT_SECRET_KEY to ${SECRETS_FILE}"
 fi
 
-# OpenHost has no cron/scheduler, so the in-container refresh loop must be
-# on by default there. Other hosts keep the explicit opt-in (0 = off).
-if [ -z "${PIPELINE_INTERVAL_HOURS:-}" ] && [ -n "${OPENHOST_APP_DATA_DIR:-}" ]; then
-  PIPELINE_INTERVAL_HOURS=4
+# First-boot bootstrap for the admin sync token, mirroring the
+# SLOSHBOT_SECRET_KEY block above: OpenHost has no dashboard way to set
+# SLOSHBOT_ADMIN_TOKEN either, so if it's still unset after sourcing
+# secrets.env, generate one, persist it to secrets.env so it survives
+# redeploys, and export it for this run. Without a token, app/admin.py's
+# require_admin() fails closed (503) — the residential pipeline machine
+# simply can't sync until an operator sets this (here, or manually).
+if [ -z "${SLOSHBOT_ADMIN_TOKEN:-}" ] && [ -n "${OPENHOST_APP_DATA_DIR:-}" ]; then
+  SECRETS_FILE="${OPENHOST_APP_DATA_DIR}/secrets.env"
+  if [ ! -f "$SECRETS_FILE" ]; then
+    : > "$SECRETS_FILE"
+    chmod 600 "$SECRETS_FILE"
+  fi
+  SLOSHBOT_ADMIN_TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  echo "SLOSHBOT_ADMIN_TOKEN=${SLOSHBOT_ADMIN_TOKEN}" >> "$SECRETS_FILE"
+  export SLOSHBOT_ADMIN_TOKEN
+  echo "start.sh: generated and persisted a new SLOSHBOT_ADMIN_TOKEN to ${SECRETS_FILE}"
 fi
 # -----------------------------------------------------------------------
-
-INTERVAL="${PIPELINE_INTERVAL_HOURS:-0}"
-if [ "$INTERVAL" != "0" ]; then
-  (
-    sleep 15  # let the web server bind first
-    uv run python -m pipeline --loop --interval "$INTERVAL"
-  ) &
-fi
 
 UVICORN_CMD="uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
 

@@ -15,7 +15,17 @@ sloshbot/
 ├── sloshbot.db          # SQLite; the ONLY interface between pipeline and app
 ├── pipeline.py          # host-agnostic refresh: ingest -> dedup -> geocode ->
 │                         #   geofilter -> score -> prune. `python -m pipeline`
-│                         #   (one-shot) or `--loop --interval N` (no native cron)
+│                         #   (one-shot) or `--loop --interval N` (no native cron).
+│                         #   Runs on the local residential machine only — see
+│                         #   "The split-host sync model" below.
+├── sync.py              # local-machine bridge to the prod read-only server:
+│                         #   `python -m sync {pull|push|run}` — pull per-user
+│                         #   state, push the freshly refreshed catalog
+├── scripts/
+│   ├── run_daily.sh              # launchd entrypoint: sources .env.sloshbot,
+│   │                               #   execs `sync run`
+│   ├── com.sloshbot.pipeline.plist  # launchd schedule (daily 07:30)
+│   └── install_launchd.sh        # idempotent installer for the plist
 ├── ingest/
 │   ├── schema.sql       # canonical DDL
 │   ├── sources/         # one module per source (luma, eventbrite, funcheap,
@@ -28,8 +38,9 @@ sloshbot/
 │   ├── dedup.py         # cross-source duplicate detection (sets duplicate_of)
 │   ├── geocode.py       # fills lat/lon from address (cached Nominatim lookups);
 │   │                     #   also backfills home_lat/home_lon for every user
-│   ├── geofilter.py     # drops events with coords >12mi from central SF (out
-│   │                     #   of Bay Area); backstop for feeds that leak non-SF
+│   ├── geofilter.py     # drops events with coords >8mi from the Mission (out
+│   │                     #   of Bay Area; Berkeley now excluded, ~9.5mi);
+│   │                     #   backstop for feeds that leak non-SF
 │   ├── normalize.py     # RawEvent -> Event (schema below), dedup, upsert
 │   └── run.py           # CLI: python -m ingest.run [--source luma]
 ├── scoring/
@@ -45,6 +56,9 @@ sloshbot/
     ├── main.py          # FastAPI routes only — composes the layers below,
     │                     #   plus the write paths (feedback/holds/settings/home),
     │                     #   and a JSON API
+    ├── admin.py          # bearer-token-authed sync endpoints for the local
+    │                     #   pipeline machine: GET /admin/export, POST
+    │                     #   /admin/ingest — see "The split-host sync model"
     ├── auth.py           # anonymous cookie identity (current_user dependency)
     ├── models.py        # Event: the in-memory contract + JSON serialization
     ├── data.py          # pure DB reads -> Event (the only read-path SELECTs);
@@ -77,6 +91,10 @@ scorer prompt/heuristic change). `SLOSHBOT_SECRET_KEY` must be set to a real
 random value before hosting publicly — it signs each visitor's anonymous
 identity cookie so no one can forge another visitor's identity.
 
+On the *deployed* system, `pipeline.py` is never invoked directly against
+prod's DB — it only ever runs on the local residential machine, driven by
+`sync.py`. See "The split-host sync model" below.
+
 Event-type preference used to be a third scorer ("category"/"fit") driven by a
 hardcoded keyword dict in `preferences.py`. It's gone in favor of a tag filter:
 `event_tags` (populated by `ingest/tags.py`) already carries per-event tags, and
@@ -90,14 +108,66 @@ on a bare URL. Either way it's a hard filter applied in `app/filters.py::apply`
 all are never hidden by it. No code edit or rescore needed to change what
 you're interested in.
 
-**Data flow (batch, never live):**
-`pipeline.py` (cron / `--loop` / manual) → ingest each source → dedup → geocode
-→ geofilter (drop out-of-Bay-Area) → `scoring.run` (scores unscored events, cached) → prune → SQLite → web app
-(reads only) → user actions (feedback, calendar holds, settings) write back to
-SQLite, scoped to the visitor's anonymous user_id.
+**Data flow (batch, never live, split across two hosts):**
+`pipeline.py` (local residential Mac, daily via launchd) → ingest each source →
+dedup → geocode → geofilter (drop out-of-Bay-Area) → `scoring.run` (scores
+unscored events, cached) → `sync push` over HTTPS (`POST /admin/ingest`) → prod
+SQLite (reads only) → web app → user actions (feedback, calendar holds,
+settings) write back to prod's SQLite, scoped to the visitor's anonymous
+user_id → `sync pull` (`GET /admin/export`) feeds that crowd signal back to the
+local machine before its next cycle.
 
-The web app never scrapes and never calls an LLM. If the UI is broken, the
-pipeline is fine; if scraping breaks, the UI still serves yesterday's data.
+The prod web app never scrapes and never calls an LLM — both now run
+exclusively on the local machine (see "The split-host sync model" below). If
+the UI is broken, the pipeline is fine; if scraping breaks, the UI still
+serves yesterday's data; if the local machine is off for a few days, prod just
+keeps serving the last successfully pushed catalog.
+
+## The split-host sync model
+
+Event sources increasingly block datacenter IPs, so scraping can't run on the
+prod host anymore. The pipeline (scrape → dedup → geocode → score → prune) now
+runs exclusively on a local residential Mac, daily via launchd; prod is a dumb
+read-only web server that never scrapes and never calls an LLM. This also
+means the server carries as little scraping capability as possible, and there
+are no proxy bills.
+
+**Table ownership** is the load-bearing split — get this wrong and a sync
+either clobbers crowd signal or serves a stale catalog:
+
+| Owner | Tables | Direction |
+|---|---|---|
+| prod | `users`, `feedback`, `holds`, `settings` | never pushed by local |
+| local | `events`, `scores`, `event_tags`, `geocode_cache` | never pulled by prod (except FK-referenced event copies, see below) |
+
+`events` is the one table that legitimately appears on both sides of the wire:
+`/admin/export` hands back only the events referenced by feedback/holds FKs
+(so those foreign keys resolve locally even for an event the local host has
+since pruned), while `/admin/ingest` receives local's full fresher catalog.
+
+**The two endpoints** (`app/admin.py`, bearer-token authed — see "HTTP
+surface" above):
+
+- `GET /admin/export` — everything the local pipeline needs *before* a cycle:
+  all users' feedback + holds (host reputation in
+  `scoring/scorers/booze.py::_host_reputation` aggregates every user, not just
+  one) plus the event rows those FKs reference.
+- `POST /admin/ingest` — the freshly scraped+scored catalog
+  (events/scores/event_tags/geocode_cache); upserts, reconcile-deletes events
+  absent from the payload that nobody's touched, then runs the retention
+  prune. The prune (`pipeline.prune_old_events`) now only executes here —
+  nothing else calls it, since `pipeline.py` itself doesn't run on prod.
+
+**The daily local run** — `uv run python -m sync run` — is `pull → 
+pipeline.run_once() → push`: pull prod's crowd signal first (so scoring uses
+current host-reputation data), refresh the catalog, then push it back. A pull
+failure doesn't cancel the run (scoring falls back to the last pull's stale
+signal); an empty events list is refused on push unless `--force`, since prod
+treats "no events in the payload" as "delete the whole untouched catalog."
+Config (`SLOSHBOT_PROD_URL`, `SLOSHBOT_ADMIN_TOKEN`, `ANTHROPIC_API_KEY`) lives
+in `.env.sloshbot` (gitignored; see `.env.sloshbot.example`), sourced by
+`scripts/run_daily.sh`, which `scripts/com.sloshbot.pipeline.plist` fires
+daily at 07:30 via launchd (missed firings while asleep catch up on wake).
 
 ## Anonymous identity & per-visitor scoping
 
@@ -230,6 +300,18 @@ sources, and price) are gone, replaced by the single `POST /settings/filters`.
 
 ```
 UNAUTH GET  /healthz                unauthenticated liveness check → {ok, events: int}
+
+ADMIN  GET  /admin/export           per-user crowd signal (users/feedback/holds
+                                     + the events they FK onto) for the local
+                                     pipeline machine to pull before a cycle
+       POST /admin/ingest           the freshly scraped+scored catalog
+                                     (events/scores/event_tags/geocode_cache),
+                                     pushed by the local machine after a cycle
+         Both bearer-token authed via `Authorization: Bearer <SLOSHBOT_ADMIN_TOKEN>`
+         (see `app/admin.py::require_admin`) — a single shared secret for the
+         one trusted sync peer, not per-user auth. If `SLOSHBOT_ADMIN_TOKEN` is
+         unset, both routes are disabled (503), never silently open. See "The
+         split-host sync model" below.
 
 HTML   GET  /                 hero "tonight's pick" + backups + rest-of-week
        GET  /week             7-day digest, grouped by day, tiered

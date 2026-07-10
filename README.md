@@ -38,15 +38,25 @@ your own cron, or `--rescore` to force a full re-score after changing the
 booze scorer's prompt/heuristics (expensive — normally it only scores
 unscored events).
 
+In the deployed setup, `pipeline.py` doesn't run against the prod DB at
+all — see "Data flow" below and `sync.py` / `README-DEPLOY.md` for how the
+split-host sync actually works day to day.
+
 ## Data flow
 
-`pipeline.py` (cron / `--loop` / manual) → scrape each source → dedup →
-geocode → score (booze likelihood) → prune → SQLite → the web app (reads
-only, renders Jinja HTML and a JSON API) → your feedback taps, calendar
-holds, and filter/home changes write back to SQLite, scoped to your
-anonymous visitor id. The web app never scrapes and never calls an LLM
-itself — if the site looks broken, the pipeline is fine; if scraping breaks,
-the site just keeps serving yesterday's data.
+In production, scraping and scoring run on a separate local machine (a
+residential IP, since event sources increasingly block datacenter hosts),
+not on the hosted server. `pipeline.py` (daily via launchd on that local
+machine) → scrape each source → dedup → geocode → score (booze likelihood) →
+`sync.py` pushes the result over HTTPS to the hosted server. The hosted
+server itself only ever reads from SQLite (renders Jinja HTML and a JSON
+API) → your feedback taps, calendar holds, and filter/home changes write
+back to that server's SQLite, scoped to your anonymous visitor id, and get
+pulled back down to the local machine before its next run. The hosted server
+never scrapes and never calls an LLM itself — if the site looks broken, the
+pipeline is fine; if scraping breaks, the site just keeps serving
+yesterday's data. See `ARCHITECTURE.md`'s "The split-host sync model" for
+details.
 
 ## Learn more
 
