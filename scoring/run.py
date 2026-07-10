@@ -33,8 +33,16 @@ def main():
     # 3h grace window matches the UI, so in-progress events still get scored
     now = (datetime.now().astimezone() - timedelta(hours=3)).isoformat()
     with get_conn() as conn:
+        # duplicate_of IS NULL: dedup runs before scoring in the pipeline and
+        # marks cross-source dupes (the non-canonical copies) with the id of
+        # the event they duplicate. Those copies are filtered out of every read
+        # query and never shown, so scoring them just burns an LLM call apiece.
+        # Skip them here — the canonical copy still gets scored. (Out-of-area
+        # events don't need excluding: geofilter DELETEs those before this runs;
+        # dupes only get marked, not deleted, so they'd otherwise leak in.)
         events = [dict(r) for r in conn.execute(
-            "SELECT * FROM events WHERE starts_at >= ? ORDER BY starts_at", (now,))]
+            "SELECT * FROM events WHERE starts_at >= ? AND duplicate_of IS NULL "
+            "ORDER BY starts_at", (now,))]
 
     names = [n.strip() for n in args.scorer.split(",") if n.strip() in SCORERS]
     with get_conn() as conn:
