@@ -530,7 +530,7 @@
     if (state.tonightOnly && p.starts_at.slice(0, 10) !== TODAY) return false;
     // is_free is 0/1/null from the server — only 1 (truthy) counts as free
     if (state.free && !p.is_free) return false;
-    if (state.tags.size && (p.tags || []).length && !p.tags.some(t => state.tags.has(t))) return false;
+    if (state.tags.size && !(p.tags || []).some(t => state.tags.has(t))) return false;
     if (state.sources.size && !state.sources.has(p.source)) return false;
     return true;
   }

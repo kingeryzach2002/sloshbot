@@ -408,15 +408,15 @@
     EVENTS.forEach(e => sourceCounts.set(e.source, (sourceCounts.get(e.source) || 0) + 1));
 
     // ---- filtering ----
-    // distance: events with unknown (null) distance are never dropped by the cap,
-    // and untagged events are never dropped by the tag filter — both matching
-    // app/main.py's list_events behavior. Every event has a source, so the
-    // source filter is a plain membership test. is_free is a 3-state
-    // 0/1/null field from the backend: only 1 (truthy) counts as free.
+    // distance: events with unknown (null) distance are never dropped by the cap;
+    // an active tag filter drops untagged events too (it means "only these
+    // tags") — both matching app/main.py's list_events behavior. Every event
+    // has a source, so the source filter is a plain membership test. is_free
+    // is a 3-state 0/1/null field from the backend: only 1 (truthy) counts as free.
     function passesHardFilters(e) {
       if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi > state.maxMi) return false;
       if (state.freeOnly && !e.is_free) return false;
-      if (state.tags.size && (e.tags || []).length && !e.tags.some(t => state.tags.has(t))) return false;
+      if (state.tags.size && !(e.tags || []).some(t => state.tags.has(t))) return false;
       if (state.sources.size && !state.sources.has(e.source)) return false;
       return true;
     }

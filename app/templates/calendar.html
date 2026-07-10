@@ -342,13 +342,13 @@
 
   // hard filters, AND-composed (matches design_real.html / app/main.py):
   //  - distance: events with unknown (null) distance are never dropped;
-  //  - tags: an event with no tags is never dropped by the tag filter,
-  //          otherwise it must share at least one selected tag (union);
+  //  - tags: an active tag filter means "only these tags" — an event must
+  //          share at least one selected tag (union), untagged events included;
   //  - source: plain membership (every event has exactly one source).
   function passesFilters(e) {
     if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi > state.maxMi) return false;
     if (state.freeOnly && e.is_free !== 1) return false;
-    if (state.tags.size && (e.tags || []).length && !e.tags.some(t => state.tags.has(t))) return false;
+    if (state.tags.size && !e.tags.some(t => state.tags.has(t))) return false;
     if (state.sources.size && !state.sources.has(e.source)) return false;
     return true;
   }

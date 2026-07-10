@@ -265,13 +265,13 @@
   function saveF(patch){ try { localStorage.setItem("slosh.filters", JSON.stringify(Object.assign(loadF(), patch))); } catch(_) {} }
 
   // hard filters, combined. Null distance always PASSES (unknown location is
-  // never dropped) and untagged events are never dropped by the tag filter —
-  // both matching the weekly view / app behavior. is_free is a 3-state
-  // 0/1/null field: only 1 counts as free. Every event has a source.
+  // never dropped); an active tag filter drops untagged events too (it means
+  // "only these tags") — matching the weekly view / app behavior. is_free is
+  // a 3-state 0/1/null field: only 1 counts as free. Every event has a source.
   function passesFilters(e) {
     if (state.maxMi !== null && e.distance_mi !== null && e.distance_mi !== undefined && e.distance_mi > state.maxMi) return false;
     if (state.free && e.is_free !== 1) return false;
-    if (state.tags.size && (e.tags || []).length && !(e.tags || []).some(t => state.tags.has(t))) return false;
+    if (state.tags.size && !(e.tags || []).some(t => state.tags.has(t))) return false;
     if (state.sources.size && !state.sources.has(e.source)) return false;
     return true;
   }

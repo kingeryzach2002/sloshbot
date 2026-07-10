@@ -104,9 +104,10 @@ query string when present (shipped no-reload filtering — see "The fetch+swap
 frontend" below), falling back to the visitor's sticky defaults saved in the
 `settings` table (`included_tags`, per-visitor — see Anonymous identity below)
 on a bare URL. Either way it's a hard filter applied in `app/filters.py::apply`
-— events with none of your selected tags are hidden, events with no tags at
-all are never hidden by it. No code edit or rescore needed to change what
-you're interested in.
+— events with none of your selected tags are hidden, and (since an active tag
+filter means "only these tags") events with no tags at all are hidden too. With
+no tags selected, nothing is filtered by tag. No code edit or rescore needed to
+change what you're interested in.
 
 **Data flow (batch, never live, split across two hosts):**
 `pipeline.py` (local residential Mac, daily via launchd) → ingest each source →

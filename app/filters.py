@@ -36,10 +36,11 @@ CONTRACT
         - max_mi:   if given, drop events with distance_mi is not None and > max_mi;
                     events with distance_mi is None are NEVER dropped by it.
                     (distance_mi must already be set by presenter.enrich.)
-        - tag:      if fs.tags set, drop an event only if it HAS tags and none
-                    of them intersect fs.tags; untagged events are never dropped.
+        - tag:      if fs.tags set, keep only events whose tags intersect
+                    fs.tags — an event with no tags at all is dropped too
+                    (an active tag filter means "only these tags").
         - min_booze:if given, drop events whose scores.get("booze", 0) < fs.min_booze
-                    (unscored counts as 0 here — unlike the tag filter).
+                    (unscored counts as 0 here).
       Returns a new list; does not mutate or reorder beyond dropping.
 
   chip_counts(events) -> {"tags": [{"tag","n"}...], "sources": [{"source","n"}...],
@@ -130,8 +131,8 @@ def apply(events: list[Event], fs: FilterState) -> list[Event]:
             continue  # unknown is_free matches neither free nor paid
         if fs.max_mi is not None and e.distance_mi is not None and e.distance_mi > fs.max_mi:
             continue  # events with unknown location are never dropped by the filter
-        if inc_tags and e.tags and not (inc_tags & set(e.tags)):
-            continue  # tag filter is a hard filter; untagged events are never dropped by it
+        if inc_tags and not (inc_tags & set(e.tags)):
+            continue  # active tag filter means "only these tags" — untagged events are dropped too
         if fs.min_booze is not None and e.scores.get("booze", 0) < fs.min_booze:
             continue  # confidence filter: unscored events count as 0, unlike the tag filter
         out.append(e)
