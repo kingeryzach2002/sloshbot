@@ -14,12 +14,31 @@ from datetime import datetime, timezone
 
 import requests
 
+# Fuller browser-like header set. Eventbrite's edge (Akamai) sometimes serves a
+# 405/403 to requests that carry only a User-Agent — the Accept / sec-fetch-* /
+# sec-ch-ua trio is what a real Chrome navigation sends, and including them can
+# be the difference between a block and a 200 from a datacenter IP. (It is NOT a
+# cure for hard IP-reputation blocking; if the host IP itself is flagged, no
+# header set gets through — see fetch()'s graceful partial-return handling.)
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
     ),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,"
+        "image/webp,image/apng,*/*;q=0.8"
+    ),
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Upgrade-Insecure-Requests": "1",
+    "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
 }
 
 # Eventbrite serves two browse-page templates that both embed
@@ -211,10 +230,25 @@ def _map(listing_ev: dict, ldjson: dict | None) -> dict:
 
 def fetch(limit: int = 50) -> list[dict]:
     all_listing_events: list[dict] = []
+    failures: list[str] = []
     for search_url in SEARCH_URLS:
-        html = _get(search_url)
-        data = _get_search_server_data(html, search_url)  # raises if blob missing
-        all_listing_events.extend(_collect_listing_events(data))
+        # One browse URL 405-ing/timing out (Eventbrite edge blocking) must not
+        # sink the whole source — collect from whatever pages do respond, and
+        # only surface an error if EVERY page failed (a true full block).
+        try:
+            html = _get(search_url)
+            data = _get_search_server_data(html, search_url)
+            all_listing_events.extend(_collect_listing_events(data))
+        except (requests.RequestException, RuntimeError) as exc:
+            failures.append(f"{search_url}: {exc}")
+            continue
+
+    if not all_listing_events:
+        raise RuntimeError(
+            "eventbrite: every browse page failed (likely datacenter-IP edge "
+            "blocking — works from residential IPs, 405s from cloud hosts). "
+            "Details: " + " | ".join(failures)
+        )
 
     # dedup across the two search pages
     by_id = {ev.get("id"): ev for ev in all_listing_events if ev.get("id")}
