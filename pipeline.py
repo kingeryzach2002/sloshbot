@@ -27,21 +27,26 @@ from db import get_conn, init_db
 # must never remove it.
 RETENTION_DAYS = 30
 
+# Every step runs python with -u (unbuffered stdout): when the pipeline's
+# output is redirected to a log file (launchd, `sync run`), block buffering
+# would otherwise hold a child's per-event progress lines hostage until 8KB
+# accumulate — the log looks frozen for the entire geocode/scoring step while
+# work is actually happening. Unbuffered, the log streams live.
 STEPS = [
-    ("ingest", [sys.executable, "-m", "ingest.run"]),
-    ("dedup", [sys.executable, "-m", "ingest.dedup"]),
-    ("geocode", [sys.executable, "-m", "ingest.geocode"]),
+    ("ingest", [sys.executable, "-u", "-m", "ingest.run"]),
+    ("dedup", [sys.executable, "-u", "-m", "ingest.dedup"]),
+    ("geocode", [sys.executable, "-u", "-m", "ingest.geocode"]),
     # geofilter runs after geocode (needs coordinates) and before scoring, so
     # we never spend LLM scoring calls on events we're about to drop as
     # out-of-area. Source-agnostic backstop for feeds that leak non-Bay-Area
     # events (e.g. Luma's SF place feed); see ingest/geofilter.py.
-    ("geofilter", [sys.executable, "-m", "ingest.geofilter"]),
+    ("geofilter", [sys.executable, "-u", "-m", "ingest.geofilter"]),
     # tags after geofilter (so we don't tag events about to be dropped) and
     # before scoring. Deterministic keyword/source-category extraction, no LLM —
     # cheap to re-derive every cycle. It was previously a manual `-m ingest.tags`
     # step that never ran in prod, so prod events showed up untagged; wiring it
     # in fixes that (mirrors the blurb self-heal below).
-    ("tags", [sys.executable, "-m", "ingest.tags"]),
+    ("tags", [sys.executable, "-u", "-m", "ingest.tags"]),
 ]
 
 
@@ -84,7 +89,7 @@ def run_once(rescore: bool = False) -> bool:
         else:
             _log(f"{name}: done")
 
-    score_cmd = [sys.executable, "-m", "scoring.run"]
+    score_cmd = [sys.executable, "-u", "-m", "scoring.run"]
     if rescore:
         score_cmd.append("--rescore")
     _log("scoring: starting" + (" (full rescore)" if rescore else ""))
@@ -100,7 +105,7 @@ def run_once(rescore: bool = False) -> bool:
     # existed — a cheap no-op once every row is filled. Keeps prod current without
     # a manual backfill after deploy.
     _log("blurbs: backfilling any missing card blurbs")
-    result = subprocess.run([sys.executable, "-m", "scoring.backfill_blurbs"])
+    result = subprocess.run([sys.executable, "-u", "-m", "scoring.backfill_blurbs"])
     if result.returncode != 0:
         _log(f"blurbs: FAILED (exit {result.returncode}) — non-fatal")
         ok = False

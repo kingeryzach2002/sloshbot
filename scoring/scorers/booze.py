@@ -93,7 +93,11 @@ Description: {(event.get('description') or '')[:2500]}
 Reply with ONLY a JSON object: {{"score": <float>, "rationale": "<one sentence, cite the specific evidence>", "blurb": "<the one-sentence event blurb>"}}"""
 
     try:
-        client = anthropic.Anthropic()
+        # Explicit timeout: the SDK's default (10min/attempt) let one wedged
+        # connection stall the whole scoring run for 30+ minutes mid-pipeline.
+        # A 320-token Haiku reply takes seconds; anything past a minute is a
+        # dead connection — fail fast and fall back to the heuristic.
+        client = anthropic.Anthropic(timeout=60.0, max_retries=2)
         resp = client.messages.create(
             model=MODEL, max_tokens=320,
             messages=[{"role": "user", "content": prompt}],
@@ -131,7 +135,9 @@ Description: {(event.get('description') or '')[:2500]}
 Reply with ONLY a JSON object: {{"blurb": "<the one-sentence event blurb>"}}"""
 
     try:
-        client = anthropic.Anthropic()
+        # Same explicit timeout rationale as _llm above: never let one dead
+        # connection stall the pipeline.
+        client = anthropic.Anthropic(timeout=60.0, max_retries=2)
         resp = client.messages.create(
             model=MODEL, max_tokens=320,
             messages=[{"role": "user", "content": prompt}],
