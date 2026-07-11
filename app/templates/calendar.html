@@ -215,7 +215,6 @@
   .evt-pop .coupe .glass { top: 3px; bottom: 7px; width: 29px;
                             border-radius: 0 0 34px 34px; }
   .evt-pop .coupe .foot { width: 15px; }
-  .evt-pop-read { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
   .evt-pop-meta { color: var(--meta); font-size: 12px; margin-top: 9px;
                    letter-spacing: 0.005em; font-variant-numeric: oldstyle-nums proportional-nums; }
   .evt-pop-meta .free { color: var(--green); }
@@ -382,15 +381,6 @@
   // see presenter.enrich); prefer it, fall back to ends_at for safety.
   function endIso(e) { return e.end_dt || e.ends_at; }
 
-  function boozeRead(n) {
-    if (n >= 90) return "basically an open bar";
-    if (n >= 75) return "probably";
-    if (n >= 60) return "good odds";
-    if (n >= 40) return "coin flip";
-    if (n >= 20) return "unlikely";
-    return "probably dry";
-  }
-
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
@@ -497,7 +487,6 @@
     if (openChip === chip) { closePop(); return; }
     const confident = e.booze >= state.thresh;
     const dim = confident ? "" : "dim";
-    const read = boozeRead(e.booze);
     const venue = cleanVenue(e.venue_name);
     const metaParts = [
       fmtTime(e.starts_at) + "–" + fmtTime(endIso(e)),
@@ -509,11 +498,10 @@
     popEl.innerHTML = `
       <div class="evt-pop-top">
         <span class="evt-pop-title"><a href="${escapeHtml(e.url || '#')}" target="_blank" rel="noopener">${escapeHtml(e.title)}</a></span>
-        <span class="coupe ${dim}" style="--p:${e.booze}" title="${read} (${e.booze}%)">
+        <span class="coupe ${dim}" style="--p:${e.booze}" title="${e.booze}%">
           <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
         </span>
       </div>
-      <div class="evt-pop-read">${read}</div>
       <div class="evt-pop-meta">${metaParts.join(" &middot; ")}</div>
       <p class="evt-pop-blurb">${escapeHtml(e.blurb || "")}</p>
       <div class="evt-pop-foot"><div class="evt-pop-tags">${tags}</div><button type="button" class="evt-pop-hold">+ calendar</button></div>
@@ -556,10 +544,9 @@
     // the current slider value, but thereafter re-toggled live by relight()
     // without re-packing — data-booze lets that handler compare per block.
     const lit = e.booze >= state.thresh;
-    const read = boozeRead(e.booze);
     const venue = cleanVenue(e.venue_name);
     const isShort = pos.height < 3.6; // ~<35min at a 16hr/100% grid
-    const titleAttr = `${e.title} · ${fmtTime(e.starts_at)}–${fmtTime(endIso(e))} · ${venue || "venue TBA"} · ${read} (${e.booze}%)`;
+    const titleAttr = `${e.title} · ${fmtTime(e.starts_at)}–${fmtTime(endIso(e))} · ${venue || "venue TBA"} · ${e.booze}%`;
     return `<div class="evt ${lit ? "confident" : ""} ${isShort ? "short" : ""}" data-id="${escapeHtml(e.id)}" data-booze="${e.booze}"
                  tabindex="0" role="button" aria-haspopup="dialog"
                  style="top:${pos.top.toFixed(3)}%; height:${pos.height.toFixed(3)}%; left:${pos.left.toFixed(3)}%; width:calc(${pos.width.toFixed(3)}% - 2px); --p:${e.booze}; --h:${Math.max(pos.height, 3)}%"

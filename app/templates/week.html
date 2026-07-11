@@ -341,16 +341,6 @@
       return mon + " " + day;
     }
 
-    // wry-bartender read of the booze score — six bands, no gaps, 0..100
-    function boozeRead(n) {
-      if (n >= 90) return "basically an open bar";
-      if (n >= 75) return "probably";
-      if (n >= 60) return "good odds";
-      if (n >= 40) return "coin flip";
-      if (n >= 20) return "unlikely";
-      return "probably dry";
-    }
-
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     }
@@ -429,9 +419,8 @@
       const tierClass = confident ? "confident" : (e.booze < 25 ? "maybe low" : "maybe");
       const dim = confident ? "" : "dim";
       const venue = cleanVenue(e.venue_name);
-      const read = boozeRead(e.booze);   // tooltip only — no visible label on this view
-      // collapsed: time · venue. The coupe fill carries the booze signal;
-      // the verbal read was removed from the card as unnecessary noise here.
+      // collapsed: time · venue. The coupe fill + "NN%" tooltip carry the booze
+      // signal; the verbal read was removed from the card as off-brand noise.
       const metaShort = [fmtTime(e.starts_at), e.neighborhood ? escapeHtml(e.neighborhood) : (venue ? escapeHtml(venue) : null)]
         .filter(Boolean).join(" &middot; ");
       // expanded: the whole dateline
@@ -452,7 +441,7 @@
       return `<article class="ta-card ${tierClass} enter" data-id="${escapeHtml(e.id)}">
         <div class="ta-top">
           <span class="ta-title"><a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">${escapeHtml(e.title)}</a></span>
-          <span class="coupe ${dim}" style="--p:${e.booze}" title="${read} (${e.booze}%)">
+          <span class="coupe ${dim}" style="--p:${e.booze}" title="${e.booze}%">
             <span class="glass"><span class="liq"></span></span><span class="stem"></span><span class="foot"></span>
           </span>
         </div>
