@@ -28,14 +28,31 @@ CONTRACT
       (tags/sources are comma-separated strings, price is a raw string,
       max_mi/min_booze are already-parsed float|None from FastAPI).
 
-  apply(events, fs: FilterState) -> list[Event]
+  apply(events, fs: FilterState, has_home: bool = False) -> list[Event]
       Keep an event iff it passes ALL of these hard filters (order-independent):
         - source:   if fs.sources set, keep only events whose source is in it.
         - price:    if fs.price set, keep only is_free==(1 if "free" else 0);
                     unknown is_free (None) matches NEITHER free nor paid.
-        - max_mi:   if given, drop events with distance_mi is not None and > max_mi;
-                    events with distance_mi is None are NEVER dropped by it.
-                    (distance_mi must already be set by presenter.enrich.)
+        - max_mi:   distance_mi is None in two different situations that MUST
+                    be told apart, which is why `has_home` exists:
+                      * no home set at all -> distance is uncomputable for
+                        EVERY event -> the filter has no reference point and
+                        stays inert (drops nothing for distance), even if
+                        fs.max_mi carries a sticky/URL default with no home.
+                      * home IS set but this one event never got geocoded
+                        (no lat/lon) -> its distance can't be confirmed
+                        <= max_mi, so it must be dropped, same as an event
+                        confirmed to be too far away.
+                    Concretely: if fs.max_mi is given and has_home, drop
+                    events whose distance_mi is None OR > max_mi; if not
+                    has_home, distance_mi is None for every event (enrich
+                    never had a reference point either) and the filter
+                    drops nothing, matching the old behavior.
+                    (distance_mi must already be set by presenter.enrich;
+                    has_home must be derived from the SAME settings passed
+                    to enrich, via presenter.home_coords(settings) is not
+                    None — otherwise this and enrich can disagree about
+                    whether a home is set.)
         - tag:      if fs.tags set, keep only events whose tags intersect
                     fs.tags — an event with no tags at all is dropped too
                     (an active tag filter means "only these tags").
@@ -118,7 +135,7 @@ def from_query(tags: str | None, sources: str | None, price: str | None,
     )
 
 
-def apply(events: list[Event], fs: FilterState) -> list[Event]:
+def apply(events: list[Event], fs: FilterState, has_home: bool = False) -> list[Event]:
     inc_tags = set(fs.tags)
     inc_sources = set(fs.sources)
     price = fs.price
@@ -129,8 +146,17 @@ def apply(events: list[Event], fs: FilterState) -> list[Event]:
             continue  # source filter is a hard filter — every event has a source
         if price and e.is_free != (1 if price == "free" else 0):
             continue  # unknown is_free matches neither free nor paid
-        if fs.max_mi is not None and e.distance_mi is not None and e.distance_mi > fs.max_mi:
-            continue  # events with unknown location are never dropped by the filter
+        if fs.max_mi is not None and has_home:
+            # A home exists, so distance_mi is None only because THIS event
+            # never got geocoded — its distance can't be confirmed within
+            # range, so treat it like a too-far event rather than letting it
+            # slip through unverified.
+            if e.distance_mi is None or e.distance_mi > fs.max_mi:
+                continue
+        # else: no home set -> distance_mi is None for every event (enrich
+        # had no reference point either) -> the distance filter has nothing
+        # to compare against and stays inert, even if fs.max_mi is a sticky
+        # default from settings/URL for a visitor who never set a home.
         if inc_tags and not (inc_tags & set(e.tags)):
             continue  # active tag filter means "only these tags" — untagged events are dropped too
         if fs.min_booze is not None and e.scores.get("booze", 0) < fs.min_booze:

@@ -104,7 +104,11 @@ def load_events(user_id: str, start: datetime, end: datetime,
     events = data.fetch_events(start, end, user_id)
     settings = data.get_settings(user_id)
     presenter.enrich(events, settings)          # start/end dt, distance, gcal
-    events = filters.apply(events, fs)
+    # has_home must be derived from the same settings enrich just used, so the
+    # two agree on whether distance_mi==None means "no reference point" (inert
+    # filter) or "this event never got geocoded" (must be dropped when max_mi
+    # is active).
+    events = filters.apply(events, fs, has_home=presenter.home_coords(settings) is not None)
     return policy.rank(events)                  # composite/tier, demote, cap, sort
 
 

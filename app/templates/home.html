@@ -187,6 +187,10 @@
               list-style: none; padding: 6px 0; }
   .more summary::-webkit-details-marker { display: none; }
   .more summary:hover { color: var(--muted); }
+  /* day-group headers inside "everything else this week" */
+  .later-day { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+               color: var(--faint); font-weight: 700; margin: 18px 0 10px; }
+  .later-day:first-of-type { margin-top: 10px; }
 
   @keyframes fb-enter { from { opacity: 0; } to { opacity: 1; } }
   .ta-card.enter { animation: fb-enter .15s var(--ease); }
@@ -303,8 +307,8 @@
     if (n >= 75) return "probably";
     if (n >= 60) return "good odds";
     if (n >= 40) return "coin flip";
-    if (n >= 20) return "bring your own";
-    return "bone dry";
+    if (n >= 20) return "unlikely";
+    return "probably dry";
   }
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -361,13 +365,15 @@
     </article>`;
   }
 
-  // hero card — same anatomy, sized up, blurb doing the "voice" moment
-  function heroHtml(e) {
+  // hero card — same anatomy, sized up, blurb doing the "voice" moment.
+  // `kicker` lets the "no events tonight" fallback say "next up" instead of
+  // falsely claiming the pick is happening tonight (see render()).
+  function heroHtml(e, kicker) {
     const read = boozeRead(e.booze);
     const blurb = escapeHtml(e.blurb || "");
     const rationale = escapeHtml(e.rationale || "");
     const tags = (e.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join("");
-    return `<div class="hero-kicker"><span class="dot"></span><span class="lbl">tonight&rsquo;s pour</span></div>
+    return `<div class="hero-kicker"><span class="dot"></span><span class="lbl">${escapeHtml(kicker || "tonight’s pour")}</span></div>
     <article class="ta-card confident enter hero-card" data-id="${escapeHtml(e.id)}">
       <div class="ta-top">
         <span class="ta-title"><a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">${escapeHtml(e.title)}</a></span>
@@ -385,6 +391,31 @@
         <button class="ta-stamp" data-stamp>yep</button>
         <button class="ta-stamp miss" data-stamp="miss">nope</button></div>
     </article>`;
+  }
+
+  // events_json carries the FULL 7-day window (week/calendar reuse the same
+  // blob), so this view — the one answering "what's my move TONIGHT" — must
+  // narrow to today itself before ranking. Comparing raw Date objects would
+  // silently do this in the visitor's OWN timezone, which is wrong for any
+  // visitor not on Pacific time; starts_at carries an explicit UTC offset
+  // (see _proto_event/Event.to_dict), so pin the "what day is this" question
+  // to America/Los_Angeles — the catalog's timezone — instead of trusting
+  // the browser's local clock.
+  const TZ = "America/Los_Angeles";
+  function ymdInTZ(iso) {
+    return new Date(iso).toLocaleDateString("en-CA", { timeZone: TZ }); // en-CA => YYYY-MM-DD, sortable/comparable
+  }
+  function todayYMD() { return ymdInTZ(new Date().toISOString()); }
+  // Relative day header for the "everything else this week" groups — mirrors
+  // presenter.day_label's Tonight/Tomorrow/weekday framing so the two
+  // "tonight" surfaces (this hand-rolled JS one and the server-rendered
+  // partial) read the same way.
+  function dayLabel(iso) {
+    const ymd = ymdInTZ(iso);
+    if (ymd === todayYMD()) return "Tonight";
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (ymd === ymdInTZ(tomorrow.toISOString())) return "Tomorrow";
+    return new Date(iso).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: TZ });
   }
 
   function render() {
@@ -410,15 +441,39 @@
       return;
     }
 
-    const sorted = [...pool].sort((a, b) => b.booze - a.booze);
-    const hero = sorted[0];
-    const rest = sorted.slice(1);
+    // THE split: only events whose start date is today count as "tonight".
+    // Everything else — no matter how good its booze score — is either the
+    // "next up" fallback pick (when tonight is empty) or gets relegated to
+    // the collapsed "everything else this week" section below. Ranking the
+    // whole 7-day pool together (the old bug) let a great Thursday event
+    // outscore every real tonight option and get shown as tonight's pick.
+    const todayKey = todayYMD();
+    const tonightPool = pool.filter(e => ymdInTZ(e.starts_at) === todayKey);
+
+    let hero, rest, laterPool, kicker;
+    if (tonightPool.length) {
+      const sorted = [...tonightPool].sort((a, b) => b.booze - a.booze);
+      hero = sorted[0];
+      rest = sorted.slice(1);
+      laterPool = pool.filter(e => e !== hero && ymdInTZ(e.starts_at) !== todayKey);
+      kicker = "tonight’s pour";
+      when.innerHTML = `${fmtDow(hero.starts_at)}, <b>${fmtDate(hero.starts_at)}</b> &middot; ${tonightPool.length} on tap`;
+    } else {
+      // Nothing tonight (after filters) — fall back to the best upcoming
+      // event instead of showing an empty page, same as the server's
+      // upcoming/next-up fallback in main.py's home().
+      const sorted = [...pool].sort((a, b) => b.booze - a.booze || new Date(a.starts_at) - new Date(b.starts_at));
+      hero = sorted[0];
+      rest = [];
+      laterPool = pool.filter(e => e !== hero);
+      kicker = `next up &middot; ${fmtDow(hero.starts_at)}`;
+      when.innerHTML = `nothing pouring tonight &middot; next up ${fmtDow(hero.starts_at)}, <b>${fmtDate(hero.starts_at)}</b>`;
+    }
+
     const shown = rest.filter(e => e.booze >= THRESH);
     const low = rest.filter(e => e.booze < THRESH);
 
-    when.innerHTML = `${fmtDow(hero.starts_at)}, <b>${fmtDate(hero.starts_at)}</b> &middot; ${pool.length} on tap`;
-
-    let html = heroHtml(hero);
+    let html = heroHtml(hero, kicker);
 
     if (shown.length) {
       html += `<details class="more also"><summary>${shown.length} also pouring tonight</summary><div class="stack">${shown.map(cardHtml).join("")}</div></details>`;
@@ -426,6 +481,23 @@
 
     if (low.length) {
       html += `<details class="more"><summary>${low.length} more, less sure</summary><div class="stack">${low.map(cardHtml).join("")}</div></details>`;
+    }
+
+    if (laterPool.length) {
+      // Grouped by relative day, in the pool's existing (server-ranked)
+      // order — collapsed by default so the page still reads as ONE hero
+      // pick, per ARCHITECTURE.md's "one hero, scarcity" design.
+      const groups = new Map();
+      laterPool.forEach(e => {
+        const label = dayLabel(e.starts_at);
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(e);
+      });
+      let laterHtml = "";
+      groups.forEach((evts, label) => {
+        laterHtml += `<h3 class="later-day">${escapeHtml(label)}</h3><div class="stack">${evts.map(cardHtml).join("")}</div>`;
+      });
+      html += `<details class="more"><summary>everything else this week (${laterPool.length})</summary>${laterHtml}</details>`;
     }
 
     root.innerHTML = html;
